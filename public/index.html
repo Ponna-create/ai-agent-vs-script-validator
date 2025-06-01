@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Agent vs Simple Script Validator</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="logo">AI Agent vs Script</div>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#testimonials">Testimonials</a>
+                <a href="#faq">FAQ</a>
+            </div>
+        </nav>
+    </header>
+
+    <main>
+        <section class="hero-section">
+            <h1>AI Agent or Simple Script?</h1>
+            <p>Make the right technical decision for your project with our AI-powered analyzer</p>
+            <div class="cta-buttons">
+                <button class="primary-btn">Start Analysis</button>
+                <button class="secondary-btn">Learn More</button>
+            </div>
+        </section>
+
+        <section id="features" class="features-section">
+            <h2>Key Features</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <h3>Confidence Score</h3>
+                    <p>Get a clear confidence score from 1-100 for the recommendation</p>
+                </div>
+                <div class="feature-card">
+                    <h3>Cost Estimation</h3>
+                    <p>Detailed cost breakdown for both approaches</p>
+                </div>
+                <div class="feature-card">
+                    <h3>Code Templates</h3>
+                    <p>Get starter code templates for the recommended approach</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="analyzer" class="analyzer-section">
+            <h2>Project Analyzer</h2>
+            <div class="analyzer-form">
+                <textarea 
+                    id="projectDescription" 
+                    placeholder="Describe your project in detail (minimum 450 words). Include technical requirements, scale, complexity, integration needs, and any specific challenges."
+                    rows="10"
+                ></textarea>
+                <div class="word-count">Words: <span id="wordCount">0</span>/450</div>
+                <button id="analyzeBtn" class="primary-btn" disabled>Analyze Project (₹699)</button>
+            </div>
+        </section>
+
+        <section id="testimonials" class="testimonials-section">
+            <h2>What Developers Say</h2>
+            <div class="testimonials-grid">
+                <div class="testimonial-card">
+                    <p>"The analyzer helped me make the right choice between building an AI chatbot vs a rule-based system. Saved weeks of potential rework!"</p>
+                    <div class="author">- Sarah K., Senior Developer</div>
+                </div>
+                <div class="testimonial-card">
+                    <p>"Accurate cost estimates and starter templates made it easy to pitch the right approach to stakeholders."</p>
+                    <div class="author">- Mike R., Tech Lead</div>
+                </div>
+            </div>
+        </section>
+
+        <section id="faq" class="faq-section">
+            <h2>Frequently Asked Questions</h2>
+            <div class="faq-grid">
+                <div class="faq-item">
+                    <h3>How accurate is the analysis?</h3>
+                    <p>Our AI analyzer uses GPT-4 to provide recommendations with detailed confidence scores and reasoning.</p>
+                </div>
+                <div class="faq-item">
+                    <h3>Can I refine my analysis?</h3>
+                    <p>Yes! You get 2 re-uploads with each analysis to refine your project description and get better recommendations.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div id="results-modal" class="modal">
+        <div id="results-content" class="modal-content">
+            <span class="close">&times;</span>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2024 AI Agent vs Script Validator. All rights reserved.</p>
+    </footer>
+
+    <script src="js/main.js"></script>
+</body>
+</html> 
