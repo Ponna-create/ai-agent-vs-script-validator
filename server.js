@@ -29,12 +29,17 @@ try {
         
         // In production, we'll throw an error
         if (process.env.NODE_ENV === 'production') {
-            throw new Error('Razorpay credentials are not configured');
+            throw new Error('Razorpay credentials are not configured. Please check environment variables.');
         }
         // In development, we'll create a mock instance
         razorpay = {
             orders: {
-                create: () => Promise.resolve({ id: 'test_order', amount: 69900, currency: 'INR' })
+                create: () => Promise.resolve({ 
+                    id: 'test_order_' + Date.now(),
+                    amount: 69900,
+                    currency: 'INR',
+                    status: 'created'
+                })
             }
         };
         console.log('Created mock Razorpay instance for development');
@@ -51,7 +56,7 @@ try {
     // Create a mock instance that returns errors
     razorpay = {
         orders: {
-            create: () => Promise.reject(new Error('Payment service is not configured properly'))
+            create: () => Promise.reject(new Error('Payment service initialization failed: ' + error.message))
         }
     };
 }
@@ -157,15 +162,15 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "https://api.razorpay.com"],
+      connectSrc: ["'self'", "https://api.razorpay.com", "https://checkout.razorpay.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "https://fonts.googleapis.com", "data:"],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
       frameSrc: ["'self'", "https://api.razorpay.com", "https://checkout.razorpay.com"],
       scriptSrcElem: ["'self'", "https://checkout.razorpay.com"],
       frameAncestors: ["'self'"]
-    },
-  },
+    }
+  }
 }));
 
 // Configure CORS with proper options
