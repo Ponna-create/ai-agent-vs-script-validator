@@ -5,7 +5,9 @@ const helmet = require('helmet');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
+const timeout = require('connect-timeout');
 
+// Initialize Express app with improved error handling for Vercel deployment
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -120,6 +122,13 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Add timeout middleware
+app.use(timeout('30s'));
+app.use((req, res, next) => {
+  if (!req.timedout) next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Generate markdown content
@@ -355,7 +364,11 @@ async function processUploadedFile(req, res) {
 
     // Initialize OpenAI
     const OpenAI = require('openai');
-    const openai = new OpenAI(process.env.OPENAI_API_KEY);
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+      timeout: 30000, // 30 second timeout
+      maxRetries: 3
+    });
 
     // Prepare and send OpenAI request
     const prompt = `Analyze this project description and determine if it needs an AI agent or a simple script. Project description: ${projectDescription}
@@ -377,41 +390,55 @@ async function processUploadedFile(req, res) {
     }`;
 
     console.log('Sending request to OpenAI...');
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.7,
-      max_tokens: 2000
-    });
-
-    // Parse and validate OpenAI response
-    let analysis;
     try {
-      const responseContent = completion.choices[0].message.content;
-      analysis = JSON.parse(responseContent);
-      
-      // Validate required fields
-      const requiredFields = ['recommendation', 'confidenceScore', 'reasoning', 'costEstimate', 'timeEstimate', 'starterTemplate'];
-      const missingFields = requiredFields.filter(field => !analysis[field]);
-      
-      if (missingFields.length > 0) {
-        throw new Error(`Invalid response format. Missing fields: ${missingFields.join(', ')}`);
-      }
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.7,
+        max_tokens: 2000
+      });
 
-      // Validate field types and values
-      if (!['AI Agent', 'Simple Script'].includes(analysis.recommendation)) {
-        throw new Error('Invalid recommendation value');
-      }
-      
-      if (typeof analysis.confidenceScore !== 'number' || 
-          analysis.confidenceScore < 1 || 
-          analysis.confidenceScore > 100) {
-        throw new Error('Invalid confidence score');
-      }
+      // Parse and validate OpenAI response
+      let analysis;
+      try {
+        const responseContent = completion.choices[0].message.content;
+        analysis = JSON.parse(responseContent);
+        
+        // Validate required fields
+        const requiredFields = ['recommendation', 'confidenceScore', 'reasoning', 'costEstimate', 'timeEstimate', 'starterTemplate'];
+        const missingFields = requiredFields.filter(field => !analysis[field]);
+        
+        if (missingFields.length > 0) {
+          throw new Error(`Invalid response format. Missing fields: ${missingFields.join(', ')}`);
+        }
 
-      console.log('Analysis completed successfully');
-    } catch (parseError) {
-      throw new Error(`Failed to parse OpenAI response: ${parseError.message}`);
+        // Validate field types and values
+        if (!['AI Agent', 'Simple Script'].includes(analysis.recommendation)) {
+          throw new Error('Invalid recommendation value');
+        }
+        
+        if (typeof analysis.confidenceScore !== 'number' || 
+            analysis.confidenceScore < 1 || 
+            analysis.confidenceScore > 100) {
+          throw new Error('Invalid confidence score');
+        }
+
+        console.log('Analysis completed successfully');
+      } catch (parseError) {
+        console.error('OpenAI response parsing error:', parseError);
+        throw new Error(`Failed to parse OpenAI response: ${parseError.message}`);
+      }
+    } catch (openaiError) {
+      console.error('OpenAI API error:', openaiError);
+      if (openaiError.code === 'ECONNABORTED') {
+        throw new Error('OpenAI API request timed out');
+      } else if (openaiError.response?.status === 429) {
+        throw new Error('OpenAI API rate limit exceeded');
+      } else if (openaiError.response?.status === 401) {
+        throw new Error('Invalid OpenAI API key');
+      } else {
+        throw new Error(`OpenAI API error: ${openaiError.message}`);
+      }
     }
 
     return analysis;
@@ -449,8 +476,14 @@ app.post('/api/create-payment', async (req, res) => {
 app.post('/api/analyze', async (req, res) => {
   try {
     console.log('Starting project analysis...');
+    console.log('Checking OpenAI API key:', process.env.OPENAI_API_KEY ? 'Key exists' : 'Key missing');
+    
     const OpenAI = require('openai');
-    const openai = new OpenAI(process.env.OPENAI_API_KEY);
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+      timeout: 30000, // 30 second timeout
+      maxRetries: 3
+    });
 
     const { projectDescription } = req.body;
     
