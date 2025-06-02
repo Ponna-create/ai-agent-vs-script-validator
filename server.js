@@ -154,14 +154,16 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'"],
-      fontSrc: ["'self'", "https:", "data:"],
+      connectSrc: ["'self'", "https://api.razorpay.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com", "https://fonts.googleapis.com", "data:"],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
-      frameSrc: ["'self'"],
+      frameSrc: ["'self'", "https://api.razorpay.com", "https://checkout.razorpay.com"],
+      scriptSrcElem: ["'self'", "https://checkout.razorpay.com"],
+      frameAncestors: ["'self'"]
     },
   },
 }));
@@ -279,6 +281,16 @@ app.post('/api/create-payment', checkRazorpay, async (req, res) => {
   try {
     console.log('Creating Razorpay order...');
     
+    // Validate Razorpay initialization
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      console.error('Missing Razorpay credentials');
+      return res.status(503).json({
+        error: 'Payment service configuration error',
+        details: 'Payment service is not properly configured'
+      });
+    }
+
+    // Create order options
     const options = {
       amount: 69900, // amount in smallest currency unit (paise)
       currency: "INR",
@@ -288,9 +300,17 @@ app.post('/api/create-payment', checkRazorpay, async (req, res) => {
       }
     };
 
-    const order = await razorpay.orders.create(options);
-    console.log('Order created:', order);
+    console.log('Creating order with options:', { ...options, receipt: '***' });
 
+    // Create order
+    const order = await razorpay.orders.create(options);
+    console.log('Order created:', { ...order, id: '***' });
+
+    if (!order || !order.id) {
+      throw new Error('Failed to create order: Invalid response from Razorpay');
+    }
+
+    // Send response
     res.json({
       id: order.id,
       amount: order.amount,
@@ -299,7 +319,10 @@ app.post('/api/create-payment', checkRazorpay, async (req, res) => {
     });
   } catch (error) {
     console.error('Payment creation error:', error);
-    res.status(500).json({ error: 'Failed to create payment order' });
+    res.status(500).json({ 
+      error: 'Failed to create payment order',
+      details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
   }
 });
 
