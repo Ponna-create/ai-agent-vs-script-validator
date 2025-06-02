@@ -15,6 +15,163 @@ const ANALYSIS_PRICE = 699;
 // Add session management
 let currentPaymentId = null;
 let uploadsRemaining = 0;
+let authToken = localStorage.getItem('authToken');
+let currentUser = null;
+
+// Check authentication status on page load
+checkAuthStatus();
+
+async function checkAuthStatus() {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+        try {
+            const response = await fetch('/api/user/profile', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                currentUser = data.user;
+                updateUIForLoggedInUser();
+            } else {
+                // Token invalid, clear it
+                localStorage.removeItem('authToken');
+                updateUIForLoggedOutUser();
+            }
+        } catch (error) {
+            console.error('Failed to check auth status:', error);
+            updateUIForLoggedOutUser();
+        }
+    } else {
+        updateUIForLoggedOutUser();
+    }
+}
+
+function updateUIForLoggedInUser() {
+    const authSection = document.querySelector('.auth-section');
+    if (authSection) {
+        authSection.innerHTML = `
+            <span>Welcome, ${currentUser.name || currentUser.email}</span>
+            <button onclick="logout()" class="secondary-btn">Logout</button>
+        `;
+    }
+    if (analyzeBtn) {
+        analyzeBtn.textContent = 'Analyze Project (₹${ANALYSIS_PRICE})';
+    }
+}
+
+function updateUIForLoggedOutUser() {
+    const authSection = document.querySelector('.auth-section');
+    if (authSection) {
+        authSection.innerHTML = `
+            <button onclick="showLoginModal()" class="primary-btn">Login</button>
+            <button onclick="showRegisterModal()" class="secondary-btn">Register</button>
+        `;
+    }
+    if (analyzeBtn) {
+        analyzeBtn.textContent = 'Login to Analyze';
+    }
+}
+
+function showLoginModal() {
+    modalContent.innerHTML = `
+        <div class="auth-form">
+            <h2>Login</h2>
+            <form id="loginForm" onsubmit="login(event)">
+                <input type="email" name="email" placeholder="Email" required>
+                <input type="password" name="password" placeholder="Password" required>
+                <button type="submit" class="primary-btn">Login</button>
+            </form>
+            <p>Don't have an account? <a href="#" onclick="showRegisterModal()">Register</a></p>
+        </div>
+    `;
+    modal.style.display = 'block';
+}
+
+function showRegisterModal() {
+    modalContent.innerHTML = `
+        <div class="auth-form">
+            <h2>Register</h2>
+            <form id="registerForm" onsubmit="register(event)">
+                <input type="text" name="name" placeholder="Name">
+                <input type="email" name="email" placeholder="Email" required>
+                <input type="password" name="password" placeholder="Password" required>
+                <button type="submit" class="primary-btn">Register</button>
+            </form>
+            <p>Already have an account? <a href="#" onclick="showLoginModal()">Login</a></p>
+        </div>
+    `;
+    modal.style.display = 'block';
+}
+
+async function login(event) {
+    event.preventDefault();
+    const form = event.target;
+    const email = form.email.value;
+    const password = form.password.value;
+
+    try {
+        const response = await fetch('/api/user/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ email, password })
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+            localStorage.setItem('authToken', data.token);
+            authToken = data.token;
+            currentUser = data.user;
+            modal.style.display = 'none';
+            updateUIForLoggedInUser();
+        } else {
+            throw new Error(data.error || 'Login failed');
+        }
+    } catch (error) {
+        showError(error.message);
+    }
+}
+
+async function register(event) {
+    event.preventDefault();
+    const form = event.target;
+    const name = form.name.value;
+    const email = form.email.value;
+    const password = form.password.value;
+
+    try {
+        const response = await fetch('/api/user/register', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ name, email, password })
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+            localStorage.setItem('authToken', data.token);
+            authToken = data.token;
+            currentUser = data.user;
+            modal.style.display = 'none';
+            updateUIForLoggedInUser();
+        } else {
+            throw new Error(data.error || 'Registration failed');
+        }
+    } catch (error) {
+        showError(error.message);
+    }
+}
+
+function logout() {
+    localStorage.removeItem('authToken');
+    authToken = null;
+    currentUser = null;
+    updateUIForLoggedOutUser();
+}
 
 // Event Listeners
 projectDescription.addEventListener('input', updateWordCount);
@@ -87,6 +244,11 @@ function updateWordCount() {
 
 // Payment and Analysis Functions
 async function startAnalysis() {
+    if (!authToken || !currentUser) {
+        showLoginModal();
+        return;
+    }
+
     try {
         console.log('Starting payment initialization...');
         
@@ -104,6 +266,7 @@ async function startAnalysis() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
             }
         });
         
@@ -126,6 +289,10 @@ async function startAnalysis() {
             name: "AI Agent vs Script Validator",
             description: "Project Analysis Payment",
             order_id: orderData.id,
+            prefill: {
+                name: currentUser.name || '',
+                email: currentUser.email || '',
+            },
             handler: async function (response) {
                 try {
                     console.log('Payment successful, verifying...');
@@ -142,6 +309,7 @@ async function startAnalysis() {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${authToken}`
                         },
                         body: JSON.stringify({
                             razorpay_payment_id: response.razorpay_payment_id,
@@ -169,11 +337,6 @@ async function startAnalysis() {
                     console.error('Payment verification failed:', error);
                     showError('Payment verification failed: ' + error.message);
                 }
-            },
-            prefill: {
-                name: "",
-                email: "",
-                contact: ""
             },
             theme: {
                 color: "#2563eb"

@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const Razorpay = require('razorpay');
 const { PrismaClient } = require('@prisma/client');
 const userRoutes = require('./routes/user');
+const auth = require('./middleware/auth');
 
 // Initialize Express app with improved error handling for Vercel deployment
 const app = express();
@@ -282,7 +283,7 @@ app.use((err, req, res, next) => {
 });
 
 // Create Razorpay order
-app.post('/api/create-payment', checkRazorpay, async (req, res) => {
+app.post('/api/create-payment', auth, checkRazorpay, async (req, res) => {
   try {
     console.log('Creating Razorpay order...');
     
@@ -301,11 +302,10 @@ app.post('/api/create-payment', checkRazorpay, async (req, res) => {
       currency: "INR",
       receipt: `receipt_${Date.now()}`,
       notes: {
-        type: "project_analysis"
+        type: "project_analysis",
+        userId: req.user.id // Add user ID to payment notes
       }
     };
-
-    console.log('Creating order with options:', { ...options, receipt: '***' });
 
     // Create order
     const order = await razorpay.orders.create(options);
@@ -314,6 +314,16 @@ app.post('/api/create-payment', checkRazorpay, async (req, res) => {
     if (!order || !order.id) {
       throw new Error('Failed to create order: Invalid response from Razorpay');
     }
+
+    // Create payment record in database
+    await prisma.payment.create({
+      data: {
+        userId: req.user.id,
+        razorpayOrderId: order.id,
+        amount: options.amount,
+        status: 'pending'
+      }
+    });
 
     // Send response
     res.json({
@@ -324,7 +334,7 @@ app.post('/api/create-payment', checkRazorpay, async (req, res) => {
     });
   } catch (error) {
     console.error('Payment creation error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to create payment order',
       details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
@@ -332,7 +342,7 @@ app.post('/api/create-payment', checkRazorpay, async (req, res) => {
 });
 
 // Verify Razorpay payment
-app.post('/api/verify-payment', async (req, res) => {
+app.post('/api/verify-payment', auth, async (req, res) => {
   try {
     console.log('Received payment verification request:', req.body);
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
@@ -353,6 +363,18 @@ app.post('/api/verify-payment', async (req, res) => {
         success: false 
       });
     }
+
+    // Update payment record in database
+    const payment = await prisma.payment.update({
+      where: {
+        razorpayOrderId: razorpay_order_id,
+        userId: req.user.id
+      },
+      data: {
+        razorpayPaymentId: razorpay_payment_id,
+        status: 'completed'
+      }
+    });
 
     // Create new session
     const paymentId = razorpay_payment_id;
