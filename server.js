@@ -18,11 +18,37 @@ const PORT = process.env.PORT || 3000;
 // Initialize Prisma
 const prisma = new PrismaClient();
 
-// Initialize Razorpay
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET
-});
+// Initialize Razorpay with error handling
+let razorpay;
+try {
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+        console.error('Razorpay credentials are missing:');
+        console.error('RAZORPAY_KEY_ID:', process.env.RAZORPAY_KEY_ID ? 'Set' : 'Missing');
+        console.error('RAZORPAY_KEY_SECRET:', process.env.RAZORPAY_KEY_SECRET ? 'Set' : 'Missing');
+        throw new Error('Razorpay credentials are not configured');
+    }
+
+    razorpay = new Razorpay({
+        key_id: process.env.RAZORPAY_KEY_ID,
+        key_secret: process.env.RAZORPAY_KEY_SECRET
+    });
+
+    console.log('Razorpay initialized successfully');
+} catch (error) {
+    console.error('Failed to initialize Razorpay:', error);
+    razorpay = null;
+}
+
+// Middleware to check Razorpay initialization
+const checkRazorpay = (req, res, next) => {
+    if (!razorpay) {
+        return res.status(500).json({
+            error: 'Payment service unavailable',
+            details: 'Payment system is not properly configured'
+        });
+    }
+    next();
+};
 
 // In-memory session storage (replace with Redis/DB in production)
 const sessions = new Map();
@@ -232,7 +258,7 @@ app.use((err, req, res, next) => {
 });
 
 // Create Razorpay order
-app.post('/api/create-payment', async (req, res) => {
+app.post('/api/create-payment', checkRazorpay, async (req, res) => {
   try {
     console.log('Creating Razorpay order...');
     
