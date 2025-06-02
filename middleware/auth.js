@@ -1,68 +1,69 @@
 const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
 
-let prisma;
-try {
-    prisma = new PrismaClient();
-} catch (error) {
-    console.error('Failed to initialize Prisma:', error);
-    prisma = null;
-}
+// Create a single PrismaClient instance and export it
+const prisma = new PrismaClient({
+    log: ['error', 'warn'],
+    errorFormat: 'pretty'
+});
 
 const auth = async (req, res, next) => {
     try {
-        // Check if Prisma is initialized
-        if (!prisma) {
-            throw new Error('Database connection not available');
-        }
-
+        // Get token from header
         const token = req.header('Authorization')?.replace('Bearer ', '');
         
         if (!token) {
+            console.log('No authentication token provided');
             return res.status(401).json({
                 error: 'Authentication failed',
                 details: 'No authentication token provided'
             });
         }
 
+        // Verify JWT_SECRET exists
         if (!process.env.JWT_SECRET) {
-            console.error('JWT_SECRET is not set');
+            console.error('JWT_SECRET environment variable is not set');
             return res.status(500).json({
                 error: 'Server configuration error',
                 details: 'Authentication is not properly configured'
             });
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        
-        const user = await prisma.user.findUnique({
-            where: { id: decoded.userId }
-        });
+        try {
+            // Verify token
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        if (!user) {
+            // Find user
+            const user = await prisma.user.findUnique({
+                where: { id: decoded.userId }
+            });
+
+            if (!user) {
+                console.log(`User not found for ID: ${decoded.userId}`);
+                return res.status(401).json({
+                    error: 'Authentication failed',
+                    details: 'User not found'
+                });
+            }
+
+            // Add user info to request
+            req.user = user;
+            req.token = token;
+            next();
+
+        } catch (jwtError) {
+            console.error('JWT verification failed:', jwtError);
             return res.status(401).json({
                 error: 'Authentication failed',
-                details: 'User not found'
+                details: 'Invalid or expired token'
             });
         }
 
-        // Add user to request object
-        req.user = user;
-        req.token = token;
-        next();
     } catch (error) {
         console.error('Auth middleware error:', error);
-        
-        if (error.name === 'JsonWebTokenError') {
-            return res.status(401).json({
-                error: 'Authentication failed',
-                details: 'Invalid token'
-            });
-        }
-
-        res.status(500).json({
+        return res.status(500).json({
             error: 'Server error',
-            details: 'An unexpected error occurred'
+            details: 'An unexpected error occurred during authentication'
         });
     }
 };
