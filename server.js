@@ -18,33 +18,50 @@ const PORT = process.env.PORT || 3000;
 // Initialize Prisma
 const prisma = new PrismaClient();
 
-// Initialize Razorpay with error handling
+// Initialize Razorpay with better error handling
 let razorpay;
 try {
+    // Check if environment variables are loaded
     if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-        console.error('Razorpay credentials are missing:');
-        console.error('RAZORPAY_KEY_ID:', process.env.RAZORPAY_KEY_ID ? 'Set' : 'Missing');
-        console.error('RAZORPAY_KEY_SECRET:', process.env.RAZORPAY_KEY_SECRET ? 'Set' : 'Missing');
-        throw new Error('Razorpay credentials are not configured');
+        console.error('Razorpay environment variables are missing:');
+        console.error(`RAZORPAY_KEY_ID: ${process.env.RAZORPAY_KEY_ID ? 'Present' : 'Missing'}`);
+        console.error(`RAZORPAY_KEY_SECRET: ${process.env.RAZORPAY_KEY_SECRET ? 'Present' : 'Missing'}`);
+        
+        // In production, we'll throw an error
+        if (process.env.NODE_ENV === 'production') {
+            throw new Error('Razorpay credentials are not configured');
+        }
+        // In development, we'll create a mock instance
+        razorpay = {
+            orders: {
+                create: () => Promise.resolve({ id: 'test_order', amount: 69900, currency: 'INR' })
+            }
+        };
+        console.log('Created mock Razorpay instance for development');
+    } else {
+        // Initialize real Razorpay instance
+        razorpay = new Razorpay({
+            key_id: process.env.RAZORPAY_KEY_ID,
+            key_secret: process.env.RAZORPAY_KEY_SECRET
+        });
+        console.log('Razorpay initialized successfully with real credentials');
     }
-
-    razorpay = new Razorpay({
-        key_id: process.env.RAZORPAY_KEY_ID,
-        key_secret: process.env.RAZORPAY_KEY_SECRET
-    });
-
-    console.log('Razorpay initialized successfully');
 } catch (error) {
     console.error('Failed to initialize Razorpay:', error);
-    razorpay = null;
+    // Create a mock instance that returns errors
+    razorpay = {
+        orders: {
+            create: () => Promise.reject(new Error('Payment service is not configured properly'))
+        }
+    };
 }
 
 // Middleware to check Razorpay initialization
 const checkRazorpay = (req, res, next) => {
     if (!razorpay) {
-        return res.status(500).json({
+        return res.status(503).json({
             error: 'Payment service unavailable',
-            details: 'Payment system is not properly configured'
+            details: 'Payment system is not properly configured. Please check server logs.'
         });
     }
     next();
