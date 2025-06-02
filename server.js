@@ -120,7 +120,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Generate markdown content
 function generateMarkdown(projectDescription, analysis) {
@@ -485,7 +485,7 @@ app.post('/api/analyze', async (req, res) => {
   }
 });
 
-// Serve the main application
+// Handle all other routes by serving index.html
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
