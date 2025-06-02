@@ -8,10 +8,15 @@ const multer = require('multer');
 const timeout = require('connect-timeout');
 const crypto = require('crypto');
 const Razorpay = require('razorpay');
+const { PrismaClient } = require('@prisma/client');
+const userRoutes = require('./routes/user');
 
 // Initialize Express app with improved error handling for Vercel deployment
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Initialize Prisma
+const prisma = new PrismaClient();
 
 // Initialize Razorpay
 const razorpay = new Razorpay({
