@@ -88,6 +88,17 @@ function updateWordCount() {
 // Payment and Analysis Functions
 async function startAnalysis() {
     try {
+        console.log('Starting payment initialization...');
+        
+        // Show loading state
+        modalContent.innerHTML = `
+            <div class="loading-container">
+                <h3>Initializing Payment...</h3>
+                <div class="loading-spinner"></div>
+            </div>
+        `;
+        modal.style.display = 'block';
+
         // Create Razorpay order
         const orderResponse = await fetch('/api/create-payment', {
             method: 'POST',
@@ -96,7 +107,16 @@ async function startAnalysis() {
             }
         });
         
+        if (!orderResponse.ok) {
+            throw new Error(`HTTP error! status: ${orderResponse.status}`);
+        }
+        
         const orderData = await orderResponse.json();
+        console.log('Order created:', orderData);
+        
+        if (!orderData.key || !orderData.amount || !orderData.currency || !orderData.id) {
+            throw new Error('Invalid order data received from server');
+        }
         
         // Initialize Razorpay payment
         const options = {
@@ -108,6 +128,15 @@ async function startAnalysis() {
             order_id: orderData.id,
             handler: async function (response) {
                 try {
+                    console.log('Payment successful, verifying...');
+                    // Show verifying state
+                    modalContent.innerHTML = `
+                        <div class="loading-container">
+                            <h3>Verifying Payment...</h3>
+                            <div class="loading-spinner"></div>
+                        </div>
+                    `;
+                    
                     // Verify payment
                     const verifyResponse = await fetch('/api/verify-payment', {
                         method: 'POST',
@@ -121,7 +150,12 @@ async function startAnalysis() {
                         })
                     });
 
+                    if (!verifyResponse.ok) {
+                        throw new Error(`HTTP error! status: ${verifyResponse.status}`);
+                    }
+
                     const verifyResult = await verifyResponse.json();
+                    console.log('Verification result:', verifyResult);
                     
                     if (verifyResult.success) {
                         // Store payment session info
@@ -129,11 +163,11 @@ async function startAnalysis() {
                         uploadsRemaining = verifyResult.uploadsRemaining;
                         await processAnalysis(verifyResult);
                     } else {
-                        showError(verifyResult.error || 'Payment verification failed');
+                        throw new Error(verifyResult.error || 'Payment verification failed');
                     }
                 } catch (error) {
                     console.error('Payment verification failed:', error);
-                    showError('Payment verification failed. Please try again.');
+                    showError('Payment verification failed: ' + error.message);
                 }
             },
             prefill: {
@@ -147,16 +181,22 @@ async function startAnalysis() {
             modal: {
                 ondismiss: function() {
                     console.log('Payment modal closed');
+                    modal.style.display = 'none';
                 }
             }
         };
 
+        // Close our loading modal before opening Razorpay
+        modal.style.display = 'none';
+
+        // Create and open Razorpay
+        console.log('Opening Razorpay with options:', { ...options, key: '***' });
         const rzp = new Razorpay(options);
         rzp.open();
         
     } catch (error) {
         console.error('Payment initialization failed:', error);
-        showError('Payment initialization failed. Please try again.');
+        showError('Payment initialization failed: ' + error.message);
     }
 }
 
