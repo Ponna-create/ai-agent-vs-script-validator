@@ -8,6 +8,8 @@ const closeModal = document.querySelector('.close');
 const startAnalysisBtn = document.querySelector('.hero-section .primary-btn');
 const learnMoreBtn = document.querySelector('.hero-section .secondary-btn');
 const userStatus = document.getElementById('user-status');
+const hamburger = document.querySelector('.hamburger');
+const navLinks = document.querySelector('.nav-links');
 
 // Constants
 const WORD_REQUIREMENT = 450;
@@ -688,4 +690,25 @@ styleSheet.textContent = `
     100% { transform: rotate(360deg); }
 }
 `;
-document.head.appendChild(styleSheet); 
+document.head.appendChild(styleSheet);
+
+// Mobile Navigation
+if (hamburger && navLinks) {
+    hamburger.addEventListener('click', () => {
+        navLinks.classList.toggle('active');
+    });
+
+    // Close menu when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!hamburger.contains(e.target) && !navLinks.contains(e.target)) {
+            navLinks.classList.remove('active');
+        }
+    });
+
+    // Close menu when clicking a link
+    navLinks.querySelectorAll('a').forEach(link => {
+        link.addEventListener('click', () => {
+            navLinks.classList.remove('active');
+        });
+    });
+} 
