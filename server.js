@@ -6,10 +6,18 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const timeout = require('connect-timeout');
+const crypto = require('crypto');
+const Razorpay = require('razorpay');
 
 // Initialize Express app with improved error handling for Vercel deployment
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Initialize Razorpay
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET
+});
 
 // In-memory session storage (replace with Redis/DB in production)
 const sessions = new Map();
@@ -218,37 +226,72 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Verify payment and create session
+// Create Razorpay order
+app.post('/api/create-payment', async (req, res) => {
+  try {
+    console.log('Creating Razorpay order...');
+    
+    const options = {
+      amount: 69900, // amount in smallest currency unit (paise)
+      currency: "INR",
+      receipt: `receipt_${Date.now()}`,
+      notes: {
+        type: "project_analysis"
+      }
+    };
+
+    const order = await razorpay.orders.create(options);
+    console.log('Order created:', order);
+
+    res.json({
+      id: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      key: process.env.RAZORPAY_KEY_ID
+    });
+  } catch (error) {
+    console.error('Payment creation error:', error);
+    res.status(500).json({ error: 'Failed to create payment order' });
+  }
+});
+
+// Verify Razorpay payment
 app.post('/api/verify-payment', async (req, res) => {
   try {
     console.log('Received payment verification request:', req.body);
-    const { cardNumber, expiryDate, cvv } = req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
-    if (!cardNumber || !expiryDate || !cvv) {
-      console.log('Missing payment details');
+    // Verify payment signature
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .update(body.toString())
+      .digest("hex");
+
+    const isAuthentic = expectedSignature === razorpay_signature;
+
+    if (!isAuthentic) {
+      console.log('Invalid payment signature');
       return res.status(400).json({ 
-        error: 'Missing payment details',
+        error: 'Invalid payment signature',
         success: false 
       });
     }
 
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    const paymentId = 'pay_' + Date.now();
-    console.log('Payment successful:', paymentId);
-
     // Create new session
+    const paymentId = razorpay_payment_id;
     createSession(paymentId);
 
     res.json({
       success: true,
       paymentId: paymentId,
-      message: 'Payment processed successfully',
+      message: 'Payment verified successfully',
       uploadsRemaining: 2
     });
   } catch (error) {
     console.error('Payment verification error:', error);
     res.status(500).json({ 
-      error: 'Failed to process payment',
+      error: 'Failed to verify payment',
       success: false,
       details: error.message 
     });
@@ -451,25 +494,6 @@ async function processUploadedFile(req, res) {
 // Routes
 app.get('/api/health', (req, res) => {
   res.json({ status: 'healthy' });
-});
-
-// Dummy payment route
-app.post('/api/create-payment', async (req, res) => {
-  try {
-    console.log('Creating payment order...');
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    const dummyOrderId = 'order_' + Date.now();
-    console.log('Order created:', dummyOrderId);
-    res.json({
-      id: dummyOrderId,
-      amount: 69900,
-      currency: 'INR',
-      status: 'created'
-    });
-  } catch (error) {
-    console.error('Payment creation error:', error);
-    res.status(500).json({ error: 'Failed to create payment' });
-  }
 });
 
 // Analysis route

@@ -88,7 +88,7 @@ function updateWordCount() {
 // Payment and Analysis Functions
 async function startAnalysis() {
     try {
-        // Create dummy order
+        // Create Razorpay order
         const orderResponse = await fetch('/api/create-payment', {
             method: 'POST',
             headers: {
@@ -98,146 +98,65 @@ async function startAnalysis() {
         
         const orderData = await orderResponse.json();
         
-        // Show payment modal
-        showPaymentModal(orderData);
+        // Initialize Razorpay payment
+        const options = {
+            key: orderData.key,
+            amount: orderData.amount,
+            currency: orderData.currency,
+            name: "AI Agent vs Script Validator",
+            description: "Project Analysis Payment",
+            order_id: orderData.id,
+            handler: async function (response) {
+                try {
+                    // Verify payment
+                    const verifyResponse = await fetch('/api/verify-payment', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_signature: response.razorpay_signature
+                        })
+                    });
+
+                    const verifyResult = await verifyResponse.json();
+                    
+                    if (verifyResult.success) {
+                        // Store payment session info
+                        currentPaymentId = verifyResult.paymentId;
+                        uploadsRemaining = verifyResult.uploadsRemaining;
+                        await processAnalysis(verifyResult);
+                    } else {
+                        showError(verifyResult.error || 'Payment verification failed');
+                    }
+                } catch (error) {
+                    console.error('Payment verification failed:', error);
+                    showError('Payment verification failed. Please try again.');
+                }
+            },
+            prefill: {
+                name: "",
+                email: "",
+                contact: ""
+            },
+            theme: {
+                color: "#2563eb"
+            },
+            modal: {
+                ondismiss: function() {
+                    console.log('Payment modal closed');
+                }
+            }
+        };
+
+        const rzp = new Razorpay(options);
+        rzp.open();
         
     } catch (error) {
         console.error('Payment initialization failed:', error);
         showError('Payment initialization failed. Please try again.');
-    }
-}
-
-function showPaymentModal(orderData) {
-    const paymentHTML = `
-        <div class="payment-form">
-            <h3>Payment Details</h3>
-            <p class="amount">Amount: ₹${ANALYSIS_PRICE}</p>
-            <div class="form-group">
-                <label for="cardNumber">Card Number</label>
-                <input type="text" id="cardNumber" placeholder="1234 5678 9012 3456" maxlength="19">
-            </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="expiryDate">Expiry Date</label>
-                    <input type="text" id="expiryDate" placeholder="MM/YY" maxlength="5">
-                </div>
-                <div class="form-group">
-                    <label for="cvv">CVV</label>
-                    <input type="text" id="cvv" placeholder="123" maxlength="3">
-                </div>
-            </div>
-            <button class="primary-btn payment-submit-btn">Pay ₹${ANALYSIS_PRICE}</button>
-        </div>
-    `;
-    
-    modalContent.innerHTML = paymentHTML;
-    modal.style.display = 'block';
-
-    // Add input formatting
-    const cardInput = document.getElementById('cardNumber');
-    const expiryInput = document.getElementById('expiryDate');
-    
-    cardInput.addEventListener('input', function(e) {
-        let value = e.target.value.replace(/\D/g, '');
-        value = value.replace(/(.{4})/g, '$1 ').trim();
-        e.target.value = value;
-    });
-
-    expiryInput.addEventListener('input', function(e) {
-        let value = e.target.value.replace(/\D/g, '');
-        if (value.length >= 2) {
-            value = value.slice(0, 2) + '/' + value.slice(2);
-        }
-        e.target.value = value;
-    });
-
-    // Add payment submit listener
-    const paymentSubmitBtn = document.querySelector('.payment-submit-btn');
-    paymentSubmitBtn.addEventListener('click', () => processPayment(orderData.id));
-}
-
-async function processPayment(orderId) {
-    try {
-        const cardNumber = document.getElementById('cardNumber').value.replace(/\s/g, '');
-        const expiryDate = document.getElementById('expiryDate').value;
-        const cvv = document.getElementById('cvv').value;
-
-        // Basic validation
-        if (!cardNumber || !expiryDate || !cvv) {
-            showError('Please fill in all payment details');
-            return;
-        }
-
-        if (cardNumber.length !== 16 || !/^\d+$/.test(cardNumber)) {
-            showError('Invalid card number. Please enter 16 digits.');
-            return;
-        }
-
-        if (!/^\d\d\/\d\d$/.test(expiryDate)) {
-            showError('Invalid expiry date. Please use MM/YY format.');
-            return;
-        }
-
-        // Validate expiry date
-        const [month, year] = expiryDate.split('/');
-        const now = new Date();
-        const currentYear = now.getFullYear() % 100;
-        const currentMonth = now.getMonth() + 1;
-
-        if (parseInt(month) < 1 || parseInt(month) > 12) {
-            showError('Invalid month in expiry date');
-            return;
-        }
-
-        if (parseInt(year) < currentYear || (parseInt(year) === currentYear && parseInt(month) < currentMonth)) {
-            showError('Card has expired');
-            return;
-        }
-
-        if (cvv.length !== 3 || !/^\d+$/.test(cvv)) {
-            showError('Invalid CVV. Please enter 3 digits.');
-            return;
-        }
-
-        // Show loading state
-        const payButton = document.querySelector('.payment-form .primary-btn');
-        payButton.textContent = 'Processing...';
-        payButton.disabled = true;
-
-        // Process payment
-        const paymentResponse = await fetch('/api/verify-payment', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                cardNumber,
-                expiryDate,
-                cvv,
-                orderId
-            })
-        });
-
-        const paymentResult = await paymentResponse.json();
-        
-        if (paymentResult.success) {
-            // Store payment session info
-            currentPaymentId = paymentResult.paymentId;
-            uploadsRemaining = paymentResult.uploadsRemaining;
-            await processAnalysis(paymentResult);
-        } else {
-            showError(paymentResult.error || 'Payment failed. Please try again.');
-        }
-    } catch (error) {
-        console.error('Payment processing failed:', error);
-        showError('Payment processing failed. Please try again.');
-    } finally {
-        // Reset button state
-        const payButton = document.querySelector('.payment-form .primary-btn');
-        if (payButton) {
-            payButton.textContent = 'Pay ₹699';
-            payButton.disabled = false;
-        }
     }
 }
 
