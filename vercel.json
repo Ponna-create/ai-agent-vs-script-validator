@@ -4,12 +4,36 @@
     {
       "src": "server.js",
       "use": "@vercel/node"
+    },
+    {
+      "src": "public/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
-      "src": "/(.*)",
+      "src": "/api/(.*)",
       "dest": "server.js"
+    },
+    {
+      "src": "^/refund-policy.html",
+      "dest": "public/refund-policy.html"
+    },
+    {
+      "src": "^/terms.html",
+      "dest": "public/terms.html"
+    },
+    {
+      "src": "^/privacy.html",
+      "dest": "public/privacy.html"
+    },
+    {
+      "src": "/",
+      "dest": "public/index.html"
+    },
+    {
+      "src": "/(.+)",
+      "dest": "public/$1"
     }
   ],
   "env": {
