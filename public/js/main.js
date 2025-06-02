@@ -56,9 +56,7 @@ function updateUIForLoggedInUser() {
             <button onclick="logout()" class="secondary-btn">Logout</button>
         `;
     }
-    if (analyzeBtn) {
-        analyzeBtn.textContent = 'Analyze Project (₹${ANALYSIS_PRICE})';
-    }
+    updateWordCount();
 }
 
 function updateUIForLoggedOutUser() {
@@ -69,9 +67,7 @@ function updateUIForLoggedOutUser() {
             <button onclick="showRegisterModal()" class="secondary-btn">Register</button>
         `;
     }
-    if (analyzeBtn) {
-        analyzeBtn.textContent = 'Login to Analyze';
-    }
+    updateWordCount();
 }
 
 function showLoginModal() {
@@ -239,7 +235,14 @@ function scrollToFeatures() {
 function updateWordCount() {
     const words = projectDescription.value.trim().split(/\s+/).length;
     wordCount.textContent = words;
-    analyzeBtn.disabled = words < WORD_REQUIREMENT;
+    
+    if (!authToken || !currentUser) {
+        analyzeBtn.textContent = 'Login to Analyze';
+        analyzeBtn.disabled = true;
+    } else {
+        analyzeBtn.textContent = `Analyze Project (₹${ANALYSIS_PRICE})`;
+        analyzeBtn.disabled = words < WORD_REQUIREMENT;
+    }
 }
 
 // Payment and Analysis Functions
@@ -370,6 +373,7 @@ async function processAnalysis(paymentResponse) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
             },
             body: JSON.stringify({
                 projectDescription: projectDescription.value,
@@ -377,11 +381,16 @@ async function processAnalysis(paymentResponse) {
             })
         });
 
+        if (!analysisResponse.ok) {
+            const errorData = await analysisResponse.json();
+            throw new Error(errorData.details || errorData.error || 'Analysis failed');
+        }
+
         const analysis = await analysisResponse.json();
         displayResults(analysis);
     } catch (error) {
         console.error('Analysis failed:', error);
-        showError('Analysis failed. Please try again.');
+        showError('Analysis failed: ' + error.message);
     }
 }
 

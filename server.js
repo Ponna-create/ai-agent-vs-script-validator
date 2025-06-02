@@ -595,7 +595,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Analysis route
-app.post('/api/analyze', async (req, res) => {
+app.post('/api/analyze', auth, async (req, res) => {
   try {
     console.log('Starting project analysis...');
     console.log('Checking OpenAI API key:', process.env.OPENAI_API_KEY ? 'Key exists' : 'Key missing');
@@ -607,7 +607,23 @@ app.post('/api/analyze', async (req, res) => {
       maxRetries: 3
     });
 
-    const { projectDescription } = req.body;
+    const { projectDescription, paymentId } = req.body;
+    
+    // Verify payment belongs to user
+    const payment = await prisma.payment.findFirst({
+      where: {
+        razorpayPaymentId: paymentId,
+        userId: req.user.id,
+        status: 'completed'
+      }
+    });
+
+    if (!payment) {
+      return res.status(403).json({
+        error: 'Invalid payment',
+        details: 'Please complete payment before analysis'
+      });
+    }
     
     const prompt = `Analyze this project description and determine if it needs an AI agent or a simple script. Project description: ${projectDescription}
     
@@ -633,6 +649,17 @@ app.post('/api/analyze', async (req, res) => {
 
     const analysis = JSON.parse(completion.choices[0].message.content);
     console.log('Analysis completed successfully');
+
+    // Store analysis in database
+    await prisma.analysis.create({
+      data: {
+        userId: req.user.id,
+        paymentId: payment.id,
+        description: projectDescription,
+        result: analysis
+      }
+    });
+
     res.json(analysis);
   } catch (error) {
     console.error('Analysis error:', error);
