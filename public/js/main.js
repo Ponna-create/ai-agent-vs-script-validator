@@ -7,6 +7,7 @@ const modalContent = document.getElementById('results-content');
 const closeModal = document.querySelector('.close');
 const startAnalysisBtn = document.querySelector('.hero-section .primary-btn');
 const learnMoreBtn = document.querySelector('.hero-section .secondary-btn');
+const userStatus = document.getElementById('user-status');
 
 // Constants
 const WORD_REQUIREMENT = 450;
@@ -56,6 +57,13 @@ function updateUIForLoggedInUser() {
             <button onclick="logout()" class="secondary-btn">Logout</button>
         `;
     }
+    
+    userStatus.className = 'user-status logged-in';
+    userStatus.innerHTML = `
+        <p>✅ Logged in as ${currentUser.name || currentUser.email}</p>
+        <small>You can now proceed with project analysis</small>
+    `;
+    
     updateWordCount();
 }
 
@@ -67,13 +75,21 @@ function updateUIForLoggedOutUser() {
             <button onclick="showRegisterModal()" class="secondary-btn">Register</button>
         `;
     }
+    
+    userStatus.className = 'user-status logged-out';
+    userStatus.innerHTML = `
+        <p>⚠️ Please log in or register to analyze your project</p>
+        <small>Create an account to get started</small>
+    `;
+    
     updateWordCount();
 }
 
 function showLoginModal() {
     modalContent.innerHTML = `
         <div class="auth-form">
-            <h2>Login</h2>
+            <h2>Login to Continue</h2>
+            <p>Please log in to analyze your project</p>
             <form id="loginForm" onsubmit="login(event)">
                 <input type="email" name="email" placeholder="Email" required>
                 <input type="password" name="password" placeholder="Password" required>
@@ -88,7 +104,8 @@ function showLoginModal() {
 function showRegisterModal() {
     modalContent.innerHTML = `
         <div class="auth-form">
-            <h2>Register</h2>
+            <h2>Create Account</h2>
+            <p>Register to start analyzing your projects</p>
             <form id="registerForm" onsubmit="register(event)">
                 <input type="text" name="name" placeholder="Name">
                 <input type="email" name="email" placeholder="Email" required>
