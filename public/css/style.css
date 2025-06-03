@@ -673,18 +673,32 @@ footer {
     background: var(--background-light);
     padding: 1rem;
     text-align: center;
-    border-bottom: 1px solid var(--border-color);
-    display: none; /* Hidden by default */
+    border-bottom: 1px solid var(--text-secondary);
+    display: block; /* Always visible */
+    margin-top: 4rem; /* Account for fixed header */
 }
 
 .user-status.logged-in {
-    display: block;
-    color: var(--text-primary);
+    background: rgba(34, 197, 94, 0.1);
+    border-color: var(--success-color);
+    color: var(--success-color);
 }
 
 .user-status.logged-out {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: var(--error-color);
+    color: var(--error-color);
+}
+
+.user-status p {
+    margin: 0;
+    font-weight: 500;
+}
+
+.user-status small {
     display: block;
-    color: var(--text-secondary);
+    margin-top: 0.5rem;
+    opacity: 0.8;
 }
 
 .auth-form {

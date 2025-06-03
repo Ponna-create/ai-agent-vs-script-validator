@@ -21,37 +21,93 @@ let uploadsRemaining = 0;
 let authToken = localStorage.getItem('authToken');
 let currentUser = null;
 
+// Add debugging flag
+const DEBUG_MODE = true;
+
+function debugLog(message, data = '') {
+    if (DEBUG_MODE) {
+        console.log(`[DEBUG] ${message}`, data);
+    }
+    updateDebugPanel();
+}
+
+function updateDebugPanel() {
+    const debugToken = document.getElementById('debug-token');
+    const debugUser = document.getElementById('debug-user');
+    const debugButton = document.getElementById('debug-button');
+    
+    if (debugToken) debugToken.textContent = authToken ? 'EXISTS' : 'NONE';
+    if (debugUser) debugUser.textContent = currentUser ? currentUser.email : 'NONE';
+    if (debugButton) debugButton.textContent = analyzeBtn ? analyzeBtn.textContent : 'NOT FOUND';
+}
+
+function forceLogout() {
+    debugLog('Force logout triggered');
+    localStorage.clear(); // Clear everything
+    authToken = null;
+    currentUser = null;
+    currentPaymentId = null;
+    uploadsRemaining = 0;
+    updateUIForLoggedOutUser();
+    updateDebugPanel();
+    alert('Forced logout complete. All localStorage cleared.');
+}
+
+function toggleDebug() {
+    const debugPanel = document.getElementById('debug-panel');
+    if (debugPanel) {
+        debugPanel.style.display = debugPanel.style.display === 'none' ? 'block' : 'none';
+    }
+}
+
 // Check authentication status on page load
 checkAuthStatus();
 
 async function checkAuthStatus() {
+    debugLog('Checking authentication status...');
     const token = localStorage.getItem('authToken');
+    debugLog('Token from localStorage:', token ? 'Token exists' : 'No token');
+    
     if (token) {
         try {
+            debugLog('Validating token with server...');
             const response = await fetch('/api/user/profile', {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
             });
+            
+            debugLog('Profile response status:', response.status);
+            
             if (response.ok) {
                 const data = await response.json();
                 currentUser = data.user;
+                authToken = token;
+                debugLog('Authentication successful:', currentUser);
                 updateUIForLoggedInUser();
             } else {
+                debugLog('Token validation failed, clearing localStorage');
                 // Token invalid, clear it
                 localStorage.removeItem('authToken');
+                authToken = null;
+                currentUser = null;
                 updateUIForLoggedOutUser();
             }
         } catch (error) {
-            console.error('Failed to check auth status:', error);
+            debugLog('Failed to check auth status:', error);
+            localStorage.removeItem('authToken');
+            authToken = null;
+            currentUser = null;
             updateUIForLoggedOutUser();
         }
     } else {
+        debugLog('No token found, showing logged out state');
         updateUIForLoggedOutUser();
     }
 }
 
 function updateUIForLoggedInUser() {
+    debugLog('Updating UI for logged in user:', currentUser);
     const authSection = document.querySelector('.auth-section');
     if (authSection) {
         authSection.innerHTML = `
@@ -70,6 +126,7 @@ function updateUIForLoggedInUser() {
 }
 
 function updateUIForLoggedOutUser() {
+    debugLog('Updating UI for logged out user');
     const authSection = document.querySelector('.auth-section');
     if (authSection) {
         authSection.innerHTML = `
@@ -88,6 +145,7 @@ function updateUIForLoggedOutUser() {
 }
 
 function showLoginModal() {
+    debugLog('Showing login modal');
     modalContent.innerHTML = `
         <div class="auth-form">
             <h2>Login to Continue</h2>
@@ -104,6 +162,7 @@ function showLoginModal() {
 }
 
 function showRegisterModal() {
+    debugLog('Showing register modal');
     modalContent.innerHTML = `
         <div class="auth-form">
             <h2>Create Account</h2>
@@ -126,6 +185,8 @@ async function login(event) {
     const email = form.email.value;
     const password = form.password.value;
 
+    debugLog('Attempting login for:', email);
+
     try {
         const response = await fetch('/api/user/login', {
             method: 'POST',
@@ -136,16 +197,20 @@ async function login(event) {
         });
 
         const data = await response.json();
+        debugLog('Login response:', { status: response.status, success: response.ok });
+        
         if (response.ok) {
             localStorage.setItem('authToken', data.token);
             authToken = data.token;
             currentUser = data.user;
+            debugLog('Login successful, user:', currentUser);
             modal.style.display = 'none';
             updateUIForLoggedInUser();
         } else {
             throw new Error(data.error || 'Login failed');
         }
     } catch (error) {
+        debugLog('Login failed:', error);
         showError(error.message);
     }
 }
@@ -157,6 +222,8 @@ async function register(event) {
     const email = form.email.value;
     const password = form.password.value;
 
+    debugLog('Attempting registration for:', email);
+
     try {
         const response = await fetch('/api/user/register', {
             method: 'POST',
@@ -167,24 +234,31 @@ async function register(event) {
         });
 
         const data = await response.json();
+        debugLog('Registration response:', { status: response.status, success: response.ok });
+        
         if (response.ok) {
             localStorage.setItem('authToken', data.token);
             authToken = data.token;
             currentUser = data.user;
+            debugLog('Registration successful, user:', currentUser);
             modal.style.display = 'none';
             updateUIForLoggedInUser();
         } else {
             throw new Error(data.error || 'Registration failed');
         }
     } catch (error) {
+        debugLog('Registration failed:', error);
         showError(error.message);
     }
 }
 
 function logout() {
+    debugLog('Logging out user');
     localStorage.removeItem('authToken');
     authToken = null;
     currentUser = null;
+    currentPaymentId = null;
+    uploadsRemaining = 0;
     updateUIForLoggedOutUser();
 }
 
@@ -255,21 +329,46 @@ function updateWordCount() {
     const words = projectDescription.value.trim().split(/\s+/).length;
     wordCount.textContent = words;
     
+    debugLog('Authentication state check:', {
+        hasToken: !!authToken,
+        hasUser: !!currentUser,
+        wordCount: words,
+        wordRequirement: WORD_REQUIREMENT
+    });
+    
     if (!authToken || !currentUser) {
         analyzeBtn.textContent = 'Login to Analyze';
         analyzeBtn.disabled = true;
+        debugLog('Button disabled - not authenticated');
     } else {
         analyzeBtn.textContent = `Analyze Project (₹${ANALYSIS_PRICE})`;
         analyzeBtn.disabled = words < WORD_REQUIREMENT;
+        debugLog('Button state:', { 
+            enabled: words >= WORD_REQUIREMENT, 
+            wordCount: words,
+            required: WORD_REQUIREMENT 
+        });
     }
 }
 
 // Payment and Analysis Functions
 async function startAnalysis() {
+    debugLog('=== Starting Analysis Process ===');
+    debugLog('Authentication state:', {
+        hasToken: !!authToken,
+        hasUser: !!currentUser,
+        userId: currentUser?.id,
+        userEmail: currentUser?.email
+    });
+
+    // CRITICAL: Check authentication first
     if (!authToken || !currentUser) {
+        debugLog('Authentication failed - showing login modal');
         showLoginModal();
         return;
     }
+
+    debugLog('Authentication passed, proceeding to payment...');
 
     try {
         console.log('Starting payment initialization...');
@@ -278,11 +377,14 @@ async function startAnalysis() {
         modalContent.innerHTML = `
             <div class="loading-container">
                 <h3>Initializing Payment...</h3>
+                <p>Please wait while we prepare your payment...</p>
                 <div class="loading-spinner"></div>
             </div>
         `;
         modal.style.display = 'block';
 
+        debugLog('Making payment creation request...');
+        
         // Create Razorpay order
         const orderResponse = await fetch('/api/create-payment', {
             method: 'POST',
@@ -292,12 +394,33 @@ async function startAnalysis() {
             }
         });
         
+        debugLog('Payment creation response:', {
+            status: orderResponse.status,
+            ok: orderResponse.ok,
+            statusText: orderResponse.statusText
+        });
+        
         if (!orderResponse.ok) {
-            throw new Error(`HTTP error! status: ${orderResponse.status}`);
+            // Get error details
+            let errorMessage = `HTTP error! status: ${orderResponse.status}`;
+            try {
+                const errorData = await orderResponse.json();
+                errorMessage = errorData.error || errorData.details || errorMessage;
+                debugLog('Payment creation error details:', errorData);
+            } catch (parseError) {
+                debugLog('Could not parse error response');
+            }
+            
+            throw new Error(errorMessage);
         }
         
         const orderData = await orderResponse.json();
-        console.log('Order created:', orderData);
+        debugLog('Order created successfully:', { 
+            hasKey: !!orderData.key,
+            hasAmount: !!orderData.amount,
+            hasCurrency: !!orderData.currency,
+            hasId: !!orderData.id
+        });
         
         if (!orderData.key || !orderData.amount || !orderData.currency || !orderData.id) {
             throw new Error('Invalid order data received from server');
@@ -317,7 +440,7 @@ async function startAnalysis() {
             },
             handler: async function (response) {
                 try {
-                    console.log('Payment successful, verifying...');
+                    debugLog('Payment successful, verifying...');
                     // Show verifying state
                     modalContent.innerHTML = `
                         <div class="loading-container">
@@ -345,7 +468,7 @@ async function startAnalysis() {
                     }
 
                     const verifyResult = await verifyResponse.json();
-                    console.log('Verification result:', verifyResult);
+                    debugLog('Verification result:', verifyResult);
                     
                     if (verifyResult.success) {
                         // Store payment session info
@@ -356,7 +479,7 @@ async function startAnalysis() {
                         throw new Error(verifyResult.error || 'Payment verification failed');
                     }
                 } catch (error) {
-                    console.error('Payment verification failed:', error);
+                    debugLog('Payment verification failed:', error);
                     showError('Payment verification failed: ' + error.message);
                 }
             },
@@ -365,7 +488,7 @@ async function startAnalysis() {
             },
             modal: {
                 ondismiss: function() {
-                    console.log('Payment modal closed');
+                    debugLog('Payment modal closed by user');
                     modal.style.display = 'none';
                 }
             }
@@ -375,13 +498,24 @@ async function startAnalysis() {
         modal.style.display = 'none';
 
         // Create and open Razorpay
-        console.log('Opening Razorpay with options:', { ...options, key: '***' });
+        debugLog('Opening Razorpay with options...');
         const rzp = new Razorpay(options);
         rzp.open();
         
     } catch (error) {
-        console.error('Payment initialization failed:', error);
-        showError('Payment initialization failed: ' + error.message);
+        debugLog('Payment initialization failed:', error);
+        
+        // Show specific error based on the type
+        let userMessage = 'Payment initialization failed: ' + error.message;
+        
+        if (error.message.includes('503') || error.message.includes('credentials')) {
+            userMessage = 'Payment service is temporarily unavailable. Please try again later or contact support.';
+        } else if (error.message.includes('401') || error.message.includes('authentication')) {
+            userMessage = 'Authentication expired. Please log in again.';
+            logout(); // Clear authentication
+        }
+        
+        showError(userMessage);
     }
 }
 

@@ -29,9 +29,19 @@
             </div>
         </nav>
         <div id="user-status" class="user-status">
-            <!-- User status will be shown here -->
+            <p>Checking authentication...</p>
         </div>
     </header>
+
+    <!-- Debug Panel (temporary) -->
+    <div id="debug-panel" style="position: fixed; top: 80px; right: 10px; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 5px; font-size: 12px; z-index: 1000; max-width: 300px;">
+        <div><strong>Debug Info:</strong></div>
+        <div>Token: <span id="debug-token">-</span></div>
+        <div>User: <span id="debug-user">-</span></div>
+        <div>Button State: <span id="debug-button">-</span></div>
+        <button onclick="forceLogout()" style="margin-top: 5px; background: #ef4444; color: white; border: none; padding: 5px; border-radius: 3px; cursor: pointer;">Force Logout</button>
+        <button onclick="toggleDebug()" style="margin-top: 5px; background: #2563eb; color: white; border: none; padding: 5px; border-radius: 3px; cursor: pointer;">Hide Debug</button>
+    </div>
 
     <main>
         <section class="hero-section">
