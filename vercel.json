@@ -42,8 +42,8 @@
   "build": {
     "env": {
       "PRISMA_GENERATE": "true",
-      "RAZORPAY_KEY_ID": "@razorpay_key_id",
-      "RAZORPAY_KEY_SECRET": "@razorpay_key_secret"
+      "RAZORPAY_KEY_ID": "rzp_test_NKrGgFujiasvm5",
+      "RAZORPAY_KEY_SECRET": "6to2FLk1n1xORvlIH9MBopS5"
     }
   }
 } 

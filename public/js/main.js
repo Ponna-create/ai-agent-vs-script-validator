@@ -14,10 +14,11 @@ const navLinks = document.querySelector('.nav-links');
 // Constants
 const WORD_REQUIREMENT = 450;
 const ANALYSIS_PRICE = 699;
+const MAX_ANALYSES = 2;
 
 // Add session management
 let currentPaymentId = null;
-let uploadsRemaining = 0;
+let analysesRemaining = 0;
 let authToken = localStorage.getItem('authToken');
 let currentUser = null;
 
@@ -47,7 +48,7 @@ function forceLogout() {
     authToken = null;
     currentUser = null;
     currentPaymentId = null;
-    uploadsRemaining = 0;
+    analysesRemaining = 0;
     updateUIForLoggedOutUser();
     updateDebugPanel();
     alert('Forced logout complete. All localStorage cleared.');
@@ -112,6 +113,7 @@ function updateUIForLoggedInUser() {
     if (authSection) {
         authSection.innerHTML = `
             <span>Welcome, ${currentUser.name || currentUser.email}</span>
+            <small>(${analysesRemaining} analyses remaining)</small>
             <button onclick="logout()" class="secondary-btn">Logout</button>
         `;
     }
@@ -258,13 +260,13 @@ function logout() {
     authToken = null;
     currentUser = null;
     currentPaymentId = null;
-    uploadsRemaining = 0;
+    analysesRemaining = 0;
     updateUIForLoggedOutUser();
 }
 
 // Event Listeners
 projectDescription.addEventListener('input', updateWordCount);
-analyzeBtn.addEventListener('click', startAnalysis);
+analyzeBtn.addEventListener('click', handleAnalyze);
 closeModal.addEventListener('click', () => modal.style.display = 'none');
 window.addEventListener('click', (e) => {
     if (e.target === modal) modal.style.display = 'none';
@@ -341,7 +343,9 @@ function updateWordCount() {
         analyzeBtn.disabled = true;
         debugLog('Button disabled - not authenticated');
     } else {
-        analyzeBtn.textContent = `Analyze Project (₹${ANALYSIS_PRICE})`;
+        analyzeBtn.textContent = words < WORD_REQUIREMENT ? 
+            `Enter at least ${WORD_REQUIREMENT} words` : 
+            'Analyze Project';
         analyzeBtn.disabled = words < WORD_REQUIREMENT;
         debugLog('Button state:', { 
             enabled: words >= WORD_REQUIREMENT, 
@@ -352,199 +356,131 @@ function updateWordCount() {
 }
 
 // Payment and Analysis Functions
-async function startAnalysis() {
-    debugLog('=== Starting Analysis Process ===');
-    debugLog('Authentication state:', {
-        hasToken: !!authToken,
-        hasUser: !!currentUser,
-        userId: currentUser?.id,
-        userEmail: currentUser?.email
-    });
-
-    // CRITICAL: Check authentication first
-    if (!authToken || !currentUser) {
-        debugLog('Authentication failed - showing login modal');
-        showLoginModal();
+async function handleAnalyze() {
+    const words = projectDescription.value.trim().split(/\s+/).length;
+    
+    if (words < WORD_REQUIREMENT) {
+        showError(`Please enter at least ${WORD_REQUIREMENT} words for analysis`);
         return;
     }
 
-    debugLog('Authentication passed, proceeding to payment...');
-
-    try {
-        console.log('Starting payment initialization...');
-        
-        // Show loading state
-        modalContent.innerHTML = `
-            <div class="loading-container">
-                <h3>Initializing Payment...</h3>
-                <p>Please wait while we prepare your payment...</p>
-                <div class="loading-spinner"></div>
-            </div>
-        `;
-        modal.style.display = 'block';
-
-        debugLog('Making payment creation request...');
-        
-        // Create Razorpay order
-        const orderResponse = await fetch('/api/create-payment', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
-            }
-        });
-        
-        debugLog('Payment creation response:', {
-            status: orderResponse.status,
-            ok: orderResponse.ok,
-            statusText: orderResponse.statusText
-        });
-        
-        if (!orderResponse.ok) {
-            // Get error details
-            let errorMessage = `HTTP error! status: ${orderResponse.status}`;
-            try {
-                const errorData = await orderResponse.json();
-                errorMessage = errorData.error || errorData.details || errorMessage;
-                debugLog('Payment creation error details:', errorData);
-            } catch (parseError) {
-                debugLog('Could not parse error response');
-            }
-            
-            throw new Error(errorMessage);
-        }
-        
-        const orderData = await orderResponse.json();
-        debugLog('Order created successfully:', { 
-            hasKey: !!orderData.key,
-            hasAmount: !!orderData.amount,
-            hasCurrency: !!orderData.currency,
-            hasId: !!orderData.id
-        });
-        
-        if (!orderData.key || !orderData.amount || !orderData.currency || !orderData.id) {
-            throw new Error('Invalid order data received from server');
-        }
-        
-        // Initialize Razorpay payment
-        const options = {
-            key: orderData.key,
-            amount: orderData.amount,
-            currency: orderData.currency,
-            name: "AI Agent vs Script Validator",
-            description: "Project Analysis Payment",
-            order_id: orderData.id,
-            prefill: {
-                name: currentUser.name || '',
-                email: currentUser.email || '',
-            },
-            handler: async function (response) {
-                try {
-                    debugLog('Payment successful, verifying...');
-                    // Show verifying state
-                    modalContent.innerHTML = `
-                        <div class="loading-container">
-                            <h3>Verifying Payment...</h3>
-                            <div class="loading-spinner"></div>
-                        </div>
-                    `;
-                    
-                    // Verify payment
-                    const verifyResponse = await fetch('/api/verify-payment', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${authToken}`
-                        },
-                        body: JSON.stringify({
-                            razorpay_payment_id: response.razorpay_payment_id,
-                            razorpay_order_id: response.razorpay_order_id,
-                            razorpay_signature: response.razorpay_signature
-                        })
-                    });
-
-                    if (!verifyResponse.ok) {
-                        throw new Error(`HTTP error! status: ${verifyResponse.status}`);
-                    }
-
-                    const verifyResult = await verifyResponse.json();
-                    debugLog('Verification result:', verifyResult);
-                    
-                    if (verifyResult.success) {
-                        // Store payment session info
-                        currentPaymentId = verifyResult.paymentId;
-                        uploadsRemaining = verifyResult.uploadsRemaining;
-                        await processAnalysis(verifyResult);
-                    } else {
-                        throw new Error(verifyResult.error || 'Payment verification failed');
-                    }
-                } catch (error) {
-                    debugLog('Payment verification failed:', error);
-                    showError('Payment verification failed: ' + error.message);
-                }
-            },
-            theme: {
-                color: "#2563eb"
-            },
-            modal: {
-                ondismiss: function() {
-                    debugLog('Payment modal closed by user');
-                    modal.style.display = 'none';
-                }
-            }
-        };
-
-        // Close our loading modal before opening Razorpay
-        modal.style.display = 'none';
-
-        // Create and open Razorpay
-        debugLog('Opening Razorpay with options...');
-        const rzp = new Razorpay(options);
-        rzp.open();
-        
-    } catch (error) {
-        debugLog('Payment initialization failed:', error);
-        
-        // Show specific error based on the type
-        let userMessage = 'Payment initialization failed: ' + error.message;
-        
-        if (error.message.includes('503') || error.message.includes('credentials')) {
-            userMessage = 'Payment service is temporarily unavailable. Please try again later or contact support.';
-        } else if (error.message.includes('401') || error.message.includes('authentication')) {
-            userMessage = 'Authentication expired. Please log in again.';
-            logout(); // Clear authentication
-        }
-        
-        showError(userMessage);
+    if (!authToken || !currentUser) {
+        showRegisterModal();
+        return;
     }
-}
 
-async function processAnalysis(paymentResponse) {
+    if (analysesRemaining <= 0) {
+        showPaymentModal();
+        return;
+    }
+
     try {
-        // Send project description for analysis
-        const analysisResponse = await fetch('/api/analyze', {
+        const response = await fetch('/api/analyze', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${authToken}`
             },
             body: JSON.stringify({
-                projectDescription: projectDescription.value,
-                paymentId: paymentResponse.paymentId
+                projectDescription: projectDescription.value
             })
         });
 
-        if (!analysisResponse.ok) {
-            const errorData = await analysisResponse.json();
-            throw new Error(errorData.details || errorData.error || 'Analysis failed');
+        if (response.ok) {
+            const result = await response.json();
+            analysesRemaining--;
+            showAnalysisResults(result);
+            updateAnalysisCount();
+        } else {
+            throw new Error('Analysis failed');
         }
-
-        const analysis = await analysisResponse.json();
-        displayResults(analysis);
     } catch (error) {
-        console.error('Analysis failed:', error);
-        showError('Analysis failed: ' + error.message);
+        showError('Failed to analyze project. Please try again.');
     }
+}
+
+function showPaymentModal() {
+    modalContent.innerHTML = `
+        <div class="payment-form">
+            <h2>Purchase Analysis Credits</h2>
+            <p>Get 2 more project analyses for ₹${ANALYSIS_PRICE}</p>
+            <button onclick="initiatePayment()" class="primary-btn">Pay ₹${ANALYSIS_PRICE}</button>
+        </div>
+    `;
+    modal.style.display = 'block';
+}
+
+function updateAnalysisCount() {
+    const authSection = document.querySelector('.auth-section');
+    if (authSection && currentUser) {
+        if (analysesRemaining > 0) {
+            authSection.innerHTML = `
+                <span>Welcome, ${currentUser.name || currentUser.email}</span>
+                <small>(${analysesRemaining} analyses remaining)</small>
+                <button onclick="logout()" class="secondary-btn">Logout</button>
+            `;
+        } else {
+            authSection.innerHTML = `
+                <span>Welcome, ${currentUser.name || currentUser.email}</span>
+                <button onclick="showPaymentModal()" class="primary-btn">Buy More Analyses</button>
+                <button onclick="logout()" class="secondary-btn">Logout</button>
+            `;
+        }
+    }
+}
+
+async function handlePaymentSuccess(response) {
+    try {
+        const verifyResponse = await fetch('/api/payment/verify', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({
+                paymentId: response.razorpay_payment_id,
+                orderId: response.razorpay_order_id,
+                signature: response.razorpay_signature
+            })
+        });
+
+        if (verifyResponse.ok) {
+            analysesRemaining = MAX_ANALYSES;
+            updateAnalysisCount();
+            modal.style.display = 'none';
+            showSuccess('Payment successful! You can now analyze your project.');
+        } else {
+            throw new Error('Payment verification failed');
+        }
+    } catch (error) {
+        showError('Payment verification failed. Please contact support.');
+    }
+}
+
+function showAnalysisResults(result) {
+    modalContent.innerHTML = `
+        <div class="analysis-results">
+            <h2>Analysis Results</h2>
+            <div class="result-item">
+                <h3>Recommendation</h3>
+                <p>${result.recommendation}</p>
+            </div>
+            <div class="result-item">
+                <h3>Confidence Score</h3>
+                <p>${result.confidence}%</p>
+            </div>
+            <div class="result-item">
+                <h3>Estimated Cost</h3>
+                <p>${result.estimatedCost}</p>
+            </div>
+            <div class="result-item">
+                <h3>Time Estimate</h3>
+                <p>${result.timeEstimate}</p>
+            </div>
+            <button onclick="downloadReport()" class="primary-btn">Download Report</button>
+        </div>
+    `;
+    modal.style.display = 'block';
 }
 
 // UI Functions
@@ -591,10 +527,10 @@ function displayResults(analysis) {
                 <button class="primary-btn download-btn">
                     📥 Download Analysis (.md)
                 </button>
-                ${uploadsRemaining > 0 ? `
+                ${analysesRemaining > 0 ? `
                 <div class="upload-section">
                     <label for="mdFileUpload" class="secondary-btn">
-                        📤 Upload Edited Analysis (${uploadsRemaining} remaining)
+                        📤 Upload Edited Analysis (${analysesRemaining} remaining)
                     </label>
                     <input 
                         type="file" 
@@ -709,7 +645,7 @@ async function handleFileUpload(event) {
             <div class="loading-container">
                 <h3>Analyzing Updated Project...</h3>
                 <p>Processing your refined project description...</p>
-                <p class="upload-count">Uploads remaining: ${uploadsRemaining}</p>
+                <p class="upload-count">Uploads remaining: ${analysesRemaining}</p>
                 <div class="loading-spinner"></div>
             </div>
         `;
@@ -739,7 +675,7 @@ async function handleFileUpload(event) {
             if (response.status === 403) {
                 // Session expired or upload limit reached
                 currentPaymentId = null;
-                uploadsRemaining = 0;
+                analysesRemaining = 0;
                 throw new Error(data.details || 'Session expired or upload limit reached. Please make a new payment.');
             }
             throw new Error(data.details || data.error || 'Failed to process file');
@@ -750,7 +686,7 @@ async function handleFileUpload(event) {
         }
 
         // Update uploads remaining
-        uploadsRemaining = data.uploadsRemaining;
+        analysesRemaining = data.uploadsRemaining;
         displayResults(data);
     } catch (error) {
         console.error('Upload failed:', error);
@@ -852,4 +788,11 @@ if (hamburger && navLinks) {
             document.body.style.overflow = '';
         });
     });
-} 
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    checkAuthStatus();
+    projectDescription.addEventListener('input', updateWordCount);
+    analyzeBtn.addEventListener('click', handleAnalyze);
+}); 
