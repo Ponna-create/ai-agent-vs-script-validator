@@ -770,4 +770,26 @@ footer {
 .policy-block li {
     margin-bottom: 0.5rem;
     line-height: 1.6;
+}
+
+.success-container {
+    text-align: center;
+    padding: 2rem;
+    background: var(--background-light);
+    border-radius: 8px;
+    margin: 1rem;
+}
+
+.success-container h3 {
+    color: var(--success-color);
+    margin-bottom: 1rem;
+}
+
+.success-container p {
+    margin-bottom: 2rem;
+    color: var(--text-secondary);
+}
+
+.success-container button {
+    margin: 0.5rem;
 } 

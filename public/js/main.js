@@ -817,4 +817,123 @@ document.addEventListener('DOMContentLoaded', () => {
     checkAuthStatus();
     projectDescription.addEventListener('input', updateWordCount);
     analyzeBtn.addEventListener('click', handleAnalyze);
-}); 
+});
+
+async function initiatePayment() {
+    debugLog('Initiating payment process...');
+    
+    try {
+        // Show loading state
+        modalContent.innerHTML = `
+            <div class="loading-container">
+                <h3>Initializing Payment...</h3>
+                <p>Please wait while we prepare your payment...</p>
+                <div class="loading-spinner"></div>
+            </div>
+        `;
+        modal.style.display = 'block';
+
+        // Create Razorpay order
+        const orderResponse = await fetch('/api/create-payment', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+        
+        debugLog('Payment creation response:', {
+            status: orderResponse.status,
+            ok: orderResponse.ok
+        });
+
+        if (!orderResponse.ok) {
+            const errorData = await orderResponse.json();
+            throw new Error(errorData.error || errorData.details || 'Failed to create payment');
+        }
+
+        const orderData = await orderResponse.json();
+        debugLog('Order created:', orderData);
+
+        // Initialize Razorpay
+        const options = {
+            key: orderData.key,
+            amount: orderData.amount,
+            currency: orderData.currency,
+            name: "AI Agent vs Script Validator",
+            description: "Project Analysis Payment",
+            order_id: orderData.id,
+            prefill: {
+                name: currentUser?.name || '',
+                email: currentUser?.email || ''
+            },
+            handler: async function(response) {
+                debugLog('Payment successful, verifying...', response);
+                
+                try {
+                    const verifyResponse = await fetch('/api/verify-payment', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${authToken}`
+                        },
+                        body: JSON.stringify({
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_signature: response.razorpay_signature
+                        })
+                    });
+
+                    const verifyResult = await verifyResponse.json();
+                    debugLog('Verification result:', verifyResult);
+
+                    if (verifyResult.success) {
+                        currentPaymentId = verifyResult.paymentId;
+                        analysesRemaining = verifyResult.uploadsRemaining || 2;
+                        modal.style.display = 'none';
+                        showSuccess('Payment successful! You can now analyze your project.');
+                        updateAnalysisCount();
+                    } else {
+                        throw new Error(verifyResult.error || 'Payment verification failed');
+                    }
+                } catch (error) {
+                    debugLog('Verification error:', error);
+                    showError('Payment verification failed: ' + error.message);
+                }
+            },
+            modal: {
+                ondismiss: function() {
+                    debugLog('Payment modal dismissed');
+                    modal.style.display = 'none';
+                }
+            },
+            theme: {
+                color: "#2563eb"
+            }
+        };
+
+        // Close our loading modal before opening Razorpay
+        modal.style.display = 'none';
+
+        // Create and open Razorpay
+        const rzp = new Razorpay(options);
+        rzp.open();
+        debugLog('Razorpay modal opened');
+
+    } catch (error) {
+        debugLog('Payment initialization failed:', error);
+        showError('Failed to initialize payment: ' + error.message);
+    }
+}
+
+function showSuccess(message) {
+    const successHTML = `
+        <div class="success-container">
+            <h3>Success</h3>
+            <p>${message}</p>
+            <button class="primary-btn" onclick="modal.style.display='none';">Continue</button>
+        </div>
+    `;
+    modalContent.innerHTML = successHTML;
+    modal.style.display = 'block';
+} 
