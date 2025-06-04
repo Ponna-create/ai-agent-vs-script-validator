@@ -187,6 +187,9 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Mount user routes
+app.use('/api/user', userRoutes);
+
 // Add timeout middleware
 app.use(timeout('30s'));
 app.use((req, res, next) => {
