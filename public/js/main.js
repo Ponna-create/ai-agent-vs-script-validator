@@ -936,4 +936,136 @@ function showSuccess(message) {
     `;
     modalContent.innerHTML = successHTML;
     modal.style.display = 'block';
+}
+
+// Refund Functions
+async function requestRefund(paymentId, reason) {
+    try {
+        debugLog('Requesting refund for payment:', paymentId);
+        
+        const response = await fetch('/api/payment/refund', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({
+                paymentId,
+                reason
+            })
+        });
+
+        const result = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(result.error || 'Failed to process refund');
+        }
+
+        showSuccess('Refund request processed successfully');
+        return result;
+    } catch (error) {
+        debugLog('Refund request failed:', error);
+        showError(error.message);
+        throw error;
+    }
+}
+
+async function checkRefundStatus(paymentId) {
+    try {
+        debugLog('Checking refund status for payment:', paymentId);
+        
+        const response = await fetch(`/api/payment/refund/${paymentId}`, {
+            headers: {
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+
+        const result = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(result.error || 'Failed to check refund status');
+        }
+
+        return result.refund;
+    } catch (error) {
+        debugLog('Refund status check failed:', error);
+        showError(error.message);
+        throw error;
+    }
+}
+
+function showRefundModal(paymentId) {
+    modalContent.innerHTML = `
+        <div class="refund-container">
+            <h3>Request Refund</h3>
+            <p>Please provide a reason for your refund request:</p>
+            <textarea id="refundReason" rows="4" placeholder="Enter your reason here..."></textarea>
+            <div class="button-group">
+                <button onclick="submitRefund('${paymentId}')" class="primary-btn">Submit Request</button>
+                <button onclick="closeModal()" class="secondary-btn">Cancel</button>
+            </div>
+            <p class="small">Note: Refunds are only available within 24 hours of payment and if no analysis has been performed.</p>
+        </div>
+    `;
+    modal.style.display = 'block';
+}
+
+async function submitRefund(paymentId) {
+    const reasonElement = document.getElementById('refundReason');
+    const reason = reasonElement?.value?.trim();
+    
+    if (!reason) {
+        showError('Please provide a reason for the refund');
+        return;
+    }
+
+    try {
+        modalContent.innerHTML = `
+            <div class="loading-container">
+                <h3>Processing Refund...</h3>
+                <div class="loading-spinner"></div>
+            </div>
+        `;
+
+        const result = await requestRefund(paymentId, reason);
+        
+        modalContent.innerHTML = `
+            <div class="success-container">
+                <h3>Refund Processed</h3>
+                <p>Your refund has been processed successfully.</p>
+                <p>Amount: ₹${result.refund.amount/100}</p>
+                <button onclick="closeModal()" class="primary-btn">Close</button>
+            </div>
+        `;
+    } catch (error) {
+        modalContent.innerHTML = `
+            <div class="error-container">
+                <h3>Refund Failed</h3>
+                <p>${error.message}</p>
+                <button onclick="closeModal()" class="primary-btn">Close</button>
+            </div>
+        `;
+    }
+}
+
+// Add refund button to payment history
+function updatePaymentHistory(payments) {
+    const paymentList = document.getElementById('paymentHistory');
+    if (!paymentList) return;
+
+    paymentList.innerHTML = payments.map(payment => `
+        <div class="payment-item">
+            <div class="payment-info">
+                <span>Amount: ₹${payment.amount/100}</span>
+                <span>Date: ${new Date(payment.createdAt).toLocaleDateString()}</span>
+                <span>Status: ${payment.status}</span>
+            </div>
+            ${payment.status === 'completed' && !payment.refundStatus ? 
+                `<button onclick="showRefundModal('${payment.razorpayPaymentId}')" class="secondary-btn">Request Refund</button>` 
+                : payment.refundStatus ? 
+                `<span class="refund-status">Refund ${payment.refundStatus}</span>` 
+                : ''
+            }
+        </div>
+    `).join('');
 } 

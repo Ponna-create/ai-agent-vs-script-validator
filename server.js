@@ -10,7 +10,15 @@ const crypto = require('crypto');
 const Razorpay = require('razorpay');
 const { PrismaClient } = require('@prisma/client');
 const userRoutes = require('./routes/user');
+const paymentRoutes = require('./routes/payment');
 const auth = require('./middleware/auth');
+const { 
+    refundLimiter, 
+    paymentVerifyLimiter, 
+    loginLimiter, 
+    apiLimiter 
+} = require('./middleware/rateLimit');
+const webhookRoutes = require('./routes/webhook');
 
 // Initialize Express app with improved error handling for Vercel deployment
 const app = express();
@@ -189,6 +197,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Mount user routes
 app.use('/api/user', userRoutes);
+app.use('/api/payment', paymentRoutes);
 
 // Add timeout middleware
 app.use(timeout('30s'));
@@ -669,6 +678,17 @@ app.post('/api/analyze', auth, async (req, res) => {
     res.status(500).json({ error: 'Failed to analyze project', details: error.message });
   }
 });
+
+// Apply rate limiters to specific endpoints
+app.use('/api/payment/refund', refundLimiter);
+app.use('/api/verify-payment', paymentVerifyLimiter);
+app.use('/api/user/login', loginLimiter);
+
+// Apply general API rate limit to all other routes
+app.use('/api', apiLimiter);
+
+// Mount webhook routes (no authentication required)
+app.use('/webhook', webhookRoutes);
 
 // Handle all other routes by serving index.html
 app.get('*', (req, res) => {
