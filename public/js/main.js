@@ -108,22 +108,30 @@ async function checkAuthStatus() {
 }
 
 function updateUIForLoggedInUser() {
+    if (!currentUser) {
+        debugLog('No current user for UI update');
+        return;
+    }
+
     debugLog('Updating UI for logged in user:', currentUser);
+    
     const authSection = document.querySelector('.auth-section');
     if (authSection) {
         authSection.innerHTML = `
             <span>Welcome, ${currentUser.name || currentUser.email}</span>
-            <small>(${analysesRemaining} analyses remaining)</small>
             <button onclick="logout()" class="secondary-btn">Logout</button>
         `;
     }
     
-    userStatus.className = 'user-status logged-in';
-    userStatus.innerHTML = `
-        <p>✅ Logged in as ${currentUser.name || currentUser.email}</p>
-        <small>You can now proceed with project analysis</small>
-    `;
+    if (userStatus) {
+        userStatus.className = 'user-status logged-in';
+        userStatus.innerHTML = `
+            <p>✅ Logged in as ${currentUser.name || currentUser.email}</p>
+            <small>You can now proceed with project analysis</small>
+        `;
+    }
     
+    // Re-enable analysis if word count is sufficient
     updateWordCount();
 }
 
@@ -146,13 +154,21 @@ function updateUIForLoggedOutUser() {
     updateWordCount();
 }
 
+async function handleLoginForm(event) {
+    event.preventDefault();
+    const form = event.target;
+    const email = form.email.value;
+    const password = form.password.value;
+    await login(email, password);
+}
+
 function showLoginModal() {
     debugLog('Showing login modal');
     modalContent.innerHTML = `
         <div class="auth-form">
             <h2>Login to Continue</h2>
             <p>Please log in to analyze your project</p>
-            <form id="loginForm" onsubmit="login(event)">
+            <form id="loginForm" onsubmit="handleLoginForm(event)">
                 <input type="email" name="email" placeholder="Email" required>
                 <input type="password" name="password" placeholder="Password" required>
                 <button type="submit" class="primary-btn">Login</button>
@@ -181,15 +197,10 @@ function showRegisterModal() {
     modal.style.display = 'block';
 }
 
-async function login(event) {
-    event.preventDefault();
-    const form = event.target;
-    const email = form.email.value;
-    const password = form.password.value;
-
-    debugLog('Attempting login for:', email);
-
+async function login(email, password) {
     try {
+        debugLog('Attempting login for:', email);
+        
         const response = await fetch('/api/user/login', {
             method: 'POST',
             headers: {
@@ -199,21 +210,27 @@ async function login(event) {
         });
 
         const data = await response.json();
-        debugLog('Login response:', { status: response.status, success: response.ok });
         
-        if (response.ok) {
-            localStorage.setItem('authToken', data.token);
-            authToken = data.token;
-            currentUser = data.user;
-            debugLog('Login successful, user:', currentUser);
-            modal.style.display = 'none';
-            updateUIForLoggedInUser();
-        } else {
+        if (!response.ok) {
             throw new Error(data.error || 'Login failed');
         }
+
+        debugLog('Login successful:', { userId: data.user.id, token: data.token ? 'present' : 'missing' });
+        
+        // Set authentication state
+        authToken = data.token;
+        currentUser = data.user;
+        localStorage.setItem('authToken', authToken);
+        
+        // Update UI
+        updateUIForLoggedInUser();
+        hideModal();
+        
+        return true;
     } catch (error) {
-        debugLog('Login failed:', error);
-        showError(error.message);
+        debugLog('Login error:', error);
+        showError(error.message || 'Authentication failed. Please try again.');
+        return false;
     }
 }
 
@@ -328,6 +345,11 @@ function scrollToFeatures() {
 
 // Word Count Function
 function updateWordCount() {
+    if (!projectDescription || !wordCount || !analyzeBtn) {
+        debugLog('Required elements not found for word count update');
+        return;
+    }
+
     const words = projectDescription.value.trim().split(/\s+/).length;
     wordCount.textContent = words;
     
@@ -484,78 +506,98 @@ function showAnalysisResults(result) {
 }
 
 // UI Functions
+function showModal(content) {
+    if (!modal || !modalContent) {
+        console.error('Modal elements not found');
+        return;
+    }
+    modalContent.innerHTML = content;
+    modal.style.display = 'block';
+}
+
+function hideModal() {
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+function showError(message) {
+    const errorHTML = `
+        <div class="error-container">
+            <h3>Error</h3>
+            <p>${message}</p>
+            ${!currentPaymentId ? `
+                <button class="primary-btn" onclick="hideModal(); scrollToAnalyzer();">
+                    Start New Analysis
+                </button>
+            ` : ''}
+            <button class="secondary-btn" onclick="hideModal();">
+                Close
+            </button>
+        </div>
+    `;
+    showModal(errorHTML);
+}
+
 function displayResults(analysis) {
+    if (!analysis) {
+        showError('No analysis results to display');
+        return;
+    }
+
     const confidenceColor = getConfidenceColor(analysis.confidenceScore);
     
     // Format the starter template code with proper line breaks
     const formattedTemplate = analysis.starterTemplate
-        .split('\n')
-        .map(line => line.trim())
-        .join('\n');
+        ? analysis.starterTemplate.split('\n').map(line => line.trim()).join('\n')
+        : '';
     
     const resultsHTML = `
         <div class="results-container">
             <div class="recommendation-header">
-                <h3>Recommendation: ${analysis.recommendation}</h3>
+                <h3>Recommendation: ${analysis.recommendation || 'Not available'}</h3>
                 <div class="confidence-score" style="color: ${confidenceColor}">
-                    ${analysis.confidenceScore}% Confidence
+                    ${analysis.confidenceScore || 0}% Confidence
                 </div>
             </div>
             
             <div class="reasoning-section">
-                <h4>Why ${analysis.recommendation}?</h4>
-                <p>${analysis.reasoning}</p>
+                <h4>Why ${analysis.recommendation || 'this recommendation'}?</h4>
+                <p>${analysis.reasoning || 'No reasoning provided'}</p>
             </div>
             
             <div class="estimates-section">
                 <div class="estimate-box">
                     <h4>💰 Cost Estimate</h4>
-                    <p>${analysis.costEstimate}</p>
+                    <p>${analysis.costEstimate || 'Not available'}</p>
                 </div>
                 <div class="estimate-box">
                     <h4>⏱️ Time Estimate</h4>
-                    <p>${analysis.timeEstimate}</p>
+                    <p>${analysis.timeEstimate || 'Not available'}</p>
                 </div>
             </div>
             
-            <div class="code-template-section">
-                <h4>🚀 Starter Template</h4>
-                <pre><code>${formattedTemplate}</code></pre>
-            </div>
+            ${formattedTemplate ? `
+                <div class="code-template-section">
+                    <h4>🚀 Starter Template</h4>
+                    <pre><code>${formattedTemplate}</code></pre>
+                </div>
+            ` : ''}
 
             <div class="action-buttons">
                 <button class="primary-btn download-btn">
                     📥 Download Analysis (.md)
                 </button>
-                ${analysesRemaining > 0 ? `
-                <div class="upload-section">
-                    <label for="mdFileUpload" class="secondary-btn">
-                        📤 Upload Edited Analysis (${analysesRemaining} remaining)
-                    </label>
-                    <input 
-                        type="file" 
-                        id="mdFileUpload" 
-                        accept=".md"
-                        style="display: none;"
-                    >
-                </div>
-                ` : `
-                <div class="upload-limit-reached">
-                    <p>You have used all your re-upload attempts. To analyze more changes, please make a new payment.</p>
-                    <button class="secondary-btn" onclick="scrollToAnalyzer()">Start New Analysis</button>
-                </div>
-                `}
             </div>
         </div>
     `;
     
-    modalContent.innerHTML = resultsHTML;
-    modal.style.display = 'block';
+    showModal(resultsHTML);
 
     // Store the current analysis and description for download
     window.currentAnalysis = {
         analysis: analysis,
-        description: projectDescription.value
+        description: projectDescription ? projectDescription.value : ''
     };
 
     // Add event listeners after adding elements to DOM
@@ -701,26 +743,6 @@ function getConfidenceColor(score) {
     if (score >= 80) return '#22c55e'; // Success green
     if (score >= 60) return '#eab308'; // Warning yellow
     return '#ef4444'; // Error red
-}
-
-function showError(message) {
-    const errorHTML = `
-        <div class="error-container">
-            <h3>Error</h3>
-            <p>${message}</p>
-            ${!currentPaymentId ? `
-                <button class="primary-btn" onclick="modal.style.display='none'; scrollToAnalyzer();">
-                    Start New Analysis
-                </button>
-            ` : ''}
-            <button class="secondary-btn" onclick="modal.style.display='none';">
-                Close
-            </button>
-        </div>
-    `;
-    
-    modalContent.innerHTML = errorHTML;
-    modal.style.display = 'block';
 }
 
 // Add this CSS to your style.css file
