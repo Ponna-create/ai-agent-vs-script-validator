@@ -14,10 +14,11 @@ const navLinks = document.querySelector('.nav-links');
 // Constants
 const WORD_REQUIREMENT = 450;
 const ANALYSIS_PRICE = 699;
+const MAX_ANALYSES = 2;
 
 // Add session management
 let currentPaymentId = null;
-let uploadsRemaining = 0;
+let analysesRemaining = 0;
 let authToken = localStorage.getItem('authToken');
 let currentUser = null;
 
@@ -47,7 +48,7 @@ function forceLogout() {
     authToken = null;
     currentUser = null;
     currentPaymentId = null;
-    uploadsRemaining = 0;
+    analysesRemaining = 0;
     updateUIForLoggedOutUser();
     updateDebugPanel();
     alert('Forced logout complete. All localStorage cleared.');
@@ -107,7 +108,13 @@ async function checkAuthStatus() {
 }
 
 function updateUIForLoggedInUser() {
+    if (!currentUser) {
+        debugLog('No current user for UI update');
+        return;
+    }
+
     debugLog('Updating UI for logged in user:', currentUser);
+    
     const authSection = document.querySelector('.auth-section');
     if (authSection) {
         authSection.innerHTML = `
@@ -116,12 +123,15 @@ function updateUIForLoggedInUser() {
         `;
     }
     
-    userStatus.className = 'user-status logged-in';
-    userStatus.innerHTML = `
-        <p>✅ Logged in as ${currentUser.name || currentUser.email}</p>
-        <small>You can now proceed with project analysis</small>
-    `;
+    if (userStatus) {
+        userStatus.className = 'user-status logged-in';
+        userStatus.innerHTML = `
+            <p>✅ Logged in as ${currentUser.name || currentUser.email}</p>
+            <small>You can now proceed with project analysis</small>
+        `;
+    }
     
+    // Re-enable analysis if word count is sufficient
     updateWordCount();
 }
 
@@ -144,13 +154,21 @@ function updateUIForLoggedOutUser() {
     updateWordCount();
 }
 
+async function handleLoginForm(event) {
+    event.preventDefault();
+    const form = event.target;
+    const email = form.email.value;
+    const password = form.password.value;
+    await login(email, password);
+}
+
 function showLoginModal() {
     debugLog('Showing login modal');
     modalContent.innerHTML = `
         <div class="auth-form">
             <h2>Login to Continue</h2>
             <p>Please log in to analyze your project</p>
-            <form id="loginForm" onsubmit="login(event)">
+            <form id="loginForm" onsubmit="handleLoginForm(event)">
                 <input type="email" name="email" placeholder="Email" required>
                 <input type="password" name="password" placeholder="Password" required>
                 <button type="submit" class="primary-btn">Login</button>
@@ -179,15 +197,10 @@ function showRegisterModal() {
     modal.style.display = 'block';
 }
 
-async function login(event) {
-    event.preventDefault();
-    const form = event.target;
-    const email = form.email.value;
-    const password = form.password.value;
-
-    debugLog('Attempting login for:', email);
-
+async function login(email, password) {
     try {
+        debugLog('Attempting login for:', email);
+        
         const response = await fetch('/api/user/login', {
             method: 'POST',
             headers: {
@@ -197,21 +210,27 @@ async function login(event) {
         });
 
         const data = await response.json();
-        debugLog('Login response:', { status: response.status, success: response.ok });
         
-        if (response.ok) {
-            localStorage.setItem('authToken', data.token);
-            authToken = data.token;
-            currentUser = data.user;
-            debugLog('Login successful, user:', currentUser);
-            modal.style.display = 'none';
-            updateUIForLoggedInUser();
-        } else {
+        if (!response.ok) {
             throw new Error(data.error || 'Login failed');
         }
+
+        debugLog('Login successful:', { userId: data.user.id, token: data.token ? 'present' : 'missing' });
+        
+        // Set authentication state
+        authToken = data.token;
+        currentUser = data.user;
+        localStorage.setItem('authToken', authToken);
+        
+        // Update UI
+        updateUIForLoggedInUser();
+        hideModal();
+        
+        return true;
     } catch (error) {
-        debugLog('Login failed:', error);
-        showError(error.message);
+        debugLog('Login error:', error);
+        showError(error.message || 'Authentication failed. Please try again.');
+        return false;
     }
 }
 
@@ -258,13 +277,13 @@ function logout() {
     authToken = null;
     currentUser = null;
     currentPaymentId = null;
-    uploadsRemaining = 0;
+    analysesRemaining = 0;
     updateUIForLoggedOutUser();
 }
 
 // Event Listeners
 projectDescription.addEventListener('input', updateWordCount);
-analyzeBtn.addEventListener('click', startAnalysis);
+analyzeBtn.addEventListener('click', handleAnalyze);
 closeModal.addEventListener('click', () => modal.style.display = 'none');
 window.addEventListener('click', (e) => {
     if (e.target === modal) modal.style.display = 'none';
@@ -326,6 +345,11 @@ function scrollToFeatures() {
 
 // Word Count Function
 function updateWordCount() {
+    if (!projectDescription || !wordCount || !analyzeBtn) {
+        debugLog('Required elements not found for word count update');
+        return;
+    }
+
     const words = projectDescription.value.trim().split(/\s+/).length;
     wordCount.textContent = words;
     
@@ -341,7 +365,9 @@ function updateWordCount() {
         analyzeBtn.disabled = true;
         debugLog('Button disabled - not authenticated');
     } else {
-        analyzeBtn.textContent = `Analyze Project (₹${ANALYSIS_PRICE})`;
+        analyzeBtn.textContent = words < WORD_REQUIREMENT ? 
+            `Enter at least ${WORD_REQUIREMENT} words` : 
+            'Analyze Project';
         analyzeBtn.disabled = words < WORD_REQUIREMENT;
         debugLog('Button state:', { 
             enabled: words >= WORD_REQUIREMENT, 
@@ -352,274 +378,226 @@ function updateWordCount() {
 }
 
 // Payment and Analysis Functions
-async function startAnalysis() {
-    debugLog('=== Starting Analysis Process ===');
-    debugLog('Authentication state:', {
-        hasToken: !!authToken,
-        hasUser: !!currentUser,
-        userId: currentUser?.id,
-        userEmail: currentUser?.email
-    });
-
-    // CRITICAL: Check authentication first
-    if (!authToken || !currentUser) {
-        debugLog('Authentication failed - showing login modal');
-        showLoginModal();
+async function handleAnalyze() {
+    const words = projectDescription.value.trim().split(/\s+/).length;
+    
+    if (words < WORD_REQUIREMENT) {
+        showError(`Please enter at least ${WORD_REQUIREMENT} words for analysis`);
         return;
     }
 
-    debugLog('Authentication passed, proceeding to payment...');
-
-    try {
-        console.log('Starting payment initialization...');
-        
-        // Show loading state
-        modalContent.innerHTML = `
-            <div class="loading-container">
-                <h3>Initializing Payment...</h3>
-                <p>Please wait while we prepare your payment...</p>
-                <div class="loading-spinner"></div>
-            </div>
-        `;
-        modal.style.display = 'block';
-
-        debugLog('Making payment creation request...');
-        
-        // Create Razorpay order
-        const orderResponse = await fetch('/api/create-payment', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
-            }
-        });
-        
-        debugLog('Payment creation response:', {
-            status: orderResponse.status,
-            ok: orderResponse.ok,
-            statusText: orderResponse.statusText
-        });
-        
-        if (!orderResponse.ok) {
-            // Get error details
-            let errorMessage = `HTTP error! status: ${orderResponse.status}`;
-            try {
-                const errorData = await orderResponse.json();
-                errorMessage = errorData.error || errorData.details || errorMessage;
-                debugLog('Payment creation error details:', errorData);
-            } catch (parseError) {
-                debugLog('Could not parse error response');
-            }
-            
-            throw new Error(errorMessage);
-        }
-        
-        const orderData = await orderResponse.json();
-        debugLog('Order created successfully:', { 
-            hasKey: !!orderData.key,
-            hasAmount: !!orderData.amount,
-            hasCurrency: !!orderData.currency,
-            hasId: !!orderData.id
-        });
-        
-        if (!orderData.key || !orderData.amount || !orderData.currency || !orderData.id) {
-            throw new Error('Invalid order data received from server');
-        }
-        
-        // Initialize Razorpay payment
-        const options = {
-            key: orderData.key,
-            amount: orderData.amount,
-            currency: orderData.currency,
-            name: "AI Agent vs Script Validator",
-            description: "Project Analysis Payment",
-            order_id: orderData.id,
-            prefill: {
-                name: currentUser.name || '',
-                email: currentUser.email || '',
-            },
-            handler: async function (response) {
-                try {
-                    debugLog('Payment successful, verifying...');
-                    // Show verifying state
-                    modalContent.innerHTML = `
-                        <div class="loading-container">
-                            <h3>Verifying Payment...</h3>
-                            <div class="loading-spinner"></div>
-                        </div>
-                    `;
-                    
-                    // Verify payment
-                    const verifyResponse = await fetch('/api/verify-payment', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${authToken}`
-                        },
-                        body: JSON.stringify({
-                            razorpay_payment_id: response.razorpay_payment_id,
-                            razorpay_order_id: response.razorpay_order_id,
-                            razorpay_signature: response.razorpay_signature
-                        })
-                    });
-
-                    if (!verifyResponse.ok) {
-                        throw new Error(`HTTP error! status: ${verifyResponse.status}`);
-                    }
-
-                    const verifyResult = await verifyResponse.json();
-                    debugLog('Verification result:', verifyResult);
-                    
-                    if (verifyResult.success) {
-                        // Store payment session info
-                        currentPaymentId = verifyResult.paymentId;
-                        uploadsRemaining = verifyResult.uploadsRemaining;
-                        await processAnalysis(verifyResult);
-                    } else {
-                        throw new Error(verifyResult.error || 'Payment verification failed');
-                    }
-                } catch (error) {
-                    debugLog('Payment verification failed:', error);
-                    showError('Payment verification failed: ' + error.message);
-                }
-            },
-            theme: {
-                color: "#2563eb"
-            },
-            modal: {
-                ondismiss: function() {
-                    debugLog('Payment modal closed by user');
-                    modal.style.display = 'none';
-                }
-            }
-        };
-
-        // Close our loading modal before opening Razorpay
-        modal.style.display = 'none';
-
-        // Create and open Razorpay
-        debugLog('Opening Razorpay with options...');
-        const rzp = new Razorpay(options);
-        rzp.open();
-        
-    } catch (error) {
-        debugLog('Payment initialization failed:', error);
-        
-        // Show specific error based on the type
-        let userMessage = 'Payment initialization failed: ' + error.message;
-        
-        if (error.message.includes('503') || error.message.includes('credentials')) {
-            userMessage = 'Payment service is temporarily unavailable. Please try again later or contact support.';
-        } else if (error.message.includes('401') || error.message.includes('authentication')) {
-            userMessage = 'Authentication expired. Please log in again.';
-            logout(); // Clear authentication
-        }
-        
-        showError(userMessage);
+    if (!authToken || !currentUser) {
+        showRegisterModal();
+        return;
     }
-}
 
-async function processAnalysis(paymentResponse) {
+    if (analysesRemaining <= 0) {
+        showPaymentModal();
+        return;
+    }
+
     try {
-        // Send project description for analysis
-        const analysisResponse = await fetch('/api/analyze', {
+        const response = await fetch('/api/analyze', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${authToken}`
             },
             body: JSON.stringify({
-                projectDescription: projectDescription.value,
-                paymentId: paymentResponse.paymentId
+                projectDescription: projectDescription.value
             })
         });
 
-        if (!analysisResponse.ok) {
-            const errorData = await analysisResponse.json();
-            throw new Error(errorData.details || errorData.error || 'Analysis failed');
+        if (response.ok) {
+            const result = await response.json();
+            analysesRemaining--;
+            showAnalysisResults(result);
+            updateAnalysisCount();
+        } else {
+            throw new Error('Analysis failed');
         }
-
-        const analysis = await analysisResponse.json();
-        displayResults(analysis);
     } catch (error) {
-        console.error('Analysis failed:', error);
-        showError('Analysis failed: ' + error.message);
+        showError('Failed to analyze project. Please try again.');
     }
 }
 
+function showPaymentModal() {
+    modalContent.innerHTML = `
+        <div class="payment-form">
+            <h2>Purchase Analysis Credits</h2>
+            <p>Get 2 more project analyses for ₹${ANALYSIS_PRICE}</p>
+            <button onclick="initiatePayment()" class="primary-btn">Pay ₹${ANALYSIS_PRICE}</button>
+        </div>
+    `;
+    modal.style.display = 'block';
+}
+
+function updateAnalysisCount() {
+    const authSection = document.querySelector('.auth-section');
+    if (authSection && currentUser) {
+        if (analysesRemaining > 0) {
+            authSection.innerHTML = `
+                <span>Welcome, ${currentUser.name || currentUser.email}</span>
+                <small>(${analysesRemaining} analyses remaining)</small>
+                <button onclick="logout()" class="secondary-btn">Logout</button>
+            `;
+        } else {
+            authSection.innerHTML = `
+                <span>Welcome, ${currentUser.name || currentUser.email}</span>
+                <button onclick="showPaymentModal()" class="primary-btn">Buy More Analyses</button>
+                <button onclick="logout()" class="secondary-btn">Logout</button>
+            `;
+        }
+    }
+}
+
+async function handlePaymentSuccess(response) {
+    try {
+        const verifyResponse = await fetch('/api/payment/verify', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({
+                paymentId: response.razorpay_payment_id,
+                orderId: response.razorpay_order_id,
+                signature: response.razorpay_signature
+            })
+        });
+
+        if (verifyResponse.ok) {
+            analysesRemaining = MAX_ANALYSES;
+            updateAnalysisCount();
+            modal.style.display = 'none';
+            showSuccess('Payment successful! You can now analyze your project.');
+        } else {
+            throw new Error('Payment verification failed');
+        }
+    } catch (error) {
+        showError('Payment verification failed. Please contact support.');
+    }
+}
+
+function showAnalysisResults(result) {
+    modalContent.innerHTML = `
+        <div class="analysis-results">
+            <h2>Analysis Results</h2>
+            <div class="result-item">
+                <h3>Recommendation</h3>
+                <p>${result.recommendation}</p>
+            </div>
+            <div class="result-item">
+                <h3>Confidence Score</h3>
+                <p>${result.confidence}%</p>
+            </div>
+            <div class="result-item">
+                <h3>Estimated Cost</h3>
+                <p>${result.estimatedCost}</p>
+            </div>
+            <div class="result-item">
+                <h3>Time Estimate</h3>
+                <p>${result.timeEstimate}</p>
+            </div>
+            <button onclick="downloadReport()" class="primary-btn">Download Report</button>
+        </div>
+    `;
+    modal.style.display = 'block';
+}
+
 // UI Functions
+function showModal(content) {
+    if (!modal || !modalContent) {
+        console.error('Modal elements not found');
+        return;
+    }
+    modalContent.innerHTML = content;
+    modal.style.display = 'block';
+}
+
+function hideModal() {
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+function showError(message) {
+    const errorHTML = `
+        <div class="error-container">
+            <h3>Error</h3>
+            <p>${message}</p>
+            ${!currentPaymentId ? `
+                <button class="primary-btn" onclick="hideModal(); scrollToAnalyzer();">
+                    Start New Analysis
+                </button>
+            ` : ''}
+            <button class="secondary-btn" onclick="hideModal();">
+                Close
+            </button>
+        </div>
+    `;
+    showModal(errorHTML);
+}
+
 function displayResults(analysis) {
+    if (!analysis) {
+        showError('No analysis results to display');
+        return;
+    }
+
     const confidenceColor = getConfidenceColor(analysis.confidenceScore);
     
     // Format the starter template code with proper line breaks
     const formattedTemplate = analysis.starterTemplate
-        .split('\n')
-        .map(line => line.trim())
-        .join('\n');
+        ? analysis.starterTemplate.split('\n').map(line => line.trim()).join('\n')
+        : '';
     
     const resultsHTML = `
         <div class="results-container">
             <div class="recommendation-header">
-                <h3>Recommendation: ${analysis.recommendation}</h3>
+                <h3>Recommendation: ${analysis.recommendation || 'Not available'}</h3>
                 <div class="confidence-score" style="color: ${confidenceColor}">
-                    ${analysis.confidenceScore}% Confidence
+                    ${analysis.confidenceScore || 0}% Confidence
                 </div>
             </div>
             
             <div class="reasoning-section">
-                <h4>Why ${analysis.recommendation}?</h4>
-                <p>${analysis.reasoning}</p>
+                <h4>Why ${analysis.recommendation || 'this recommendation'}?</h4>
+                <p>${analysis.reasoning || 'No reasoning provided'}</p>
             </div>
             
             <div class="estimates-section">
                 <div class="estimate-box">
                     <h4>💰 Cost Estimate</h4>
-                    <p>${analysis.costEstimate}</p>
+                    <p>${analysis.costEstimate || 'Not available'}</p>
                 </div>
                 <div class="estimate-box">
                     <h4>⏱️ Time Estimate</h4>
-                    <p>${analysis.timeEstimate}</p>
+                    <p>${analysis.timeEstimate || 'Not available'}</p>
                 </div>
             </div>
             
-            <div class="code-template-section">
-                <h4>🚀 Starter Template</h4>
-                <pre><code>${formattedTemplate}</code></pre>
-            </div>
+            ${formattedTemplate ? `
+                <div class="code-template-section">
+                    <h4>🚀 Starter Template</h4>
+                    <pre><code>${formattedTemplate}</code></pre>
+                </div>
+            ` : ''}
 
             <div class="action-buttons">
                 <button class="primary-btn download-btn">
                     📥 Download Analysis (.md)
                 </button>
-                ${uploadsRemaining > 0 ? `
-                <div class="upload-section">
-                    <label for="mdFileUpload" class="secondary-btn">
-                        📤 Upload Edited Analysis (${uploadsRemaining} remaining)
-                    </label>
-                    <input 
-                        type="file" 
-                        id="mdFileUpload" 
-                        accept=".md"
-                        style="display: none;"
-                    >
-                </div>
-                ` : `
-                <div class="upload-limit-reached">
-                    <p>You have used all your re-upload attempts. To analyze more changes, please make a new payment.</p>
-                    <button class="secondary-btn" onclick="scrollToAnalyzer()">Start New Analysis</button>
-                </div>
-                `}
             </div>
         </div>
     `;
     
-    modalContent.innerHTML = resultsHTML;
-    modal.style.display = 'block';
+    showModal(resultsHTML);
 
     // Store the current analysis and description for download
     window.currentAnalysis = {
         analysis: analysis,
-        description: projectDescription.value
+        description: projectDescription ? projectDescription.value : ''
     };
 
     // Add event listeners after adding elements to DOM
@@ -709,7 +687,7 @@ async function handleFileUpload(event) {
             <div class="loading-container">
                 <h3>Analyzing Updated Project...</h3>
                 <p>Processing your refined project description...</p>
-                <p class="upload-count">Uploads remaining: ${uploadsRemaining}</p>
+                <p class="upload-count">Uploads remaining: ${analysesRemaining}</p>
                 <div class="loading-spinner"></div>
             </div>
         `;
@@ -739,7 +717,7 @@ async function handleFileUpload(event) {
             if (response.status === 403) {
                 // Session expired or upload limit reached
                 currentPaymentId = null;
-                uploadsRemaining = 0;
+                analysesRemaining = 0;
                 throw new Error(data.details || 'Session expired or upload limit reached. Please make a new payment.');
             }
             throw new Error(data.details || data.error || 'Failed to process file');
@@ -750,7 +728,7 @@ async function handleFileUpload(event) {
         }
 
         // Update uploads remaining
-        uploadsRemaining = data.uploadsRemaining;
+        analysesRemaining = data.uploadsRemaining;
         displayResults(data);
     } catch (error) {
         console.error('Upload failed:', error);
@@ -765,26 +743,6 @@ function getConfidenceColor(score) {
     if (score >= 80) return '#22c55e'; // Success green
     if (score >= 60) return '#eab308'; // Warning yellow
     return '#ef4444'; // Error red
-}
-
-function showError(message) {
-    const errorHTML = `
-        <div class="error-container">
-            <h3>Error</h3>
-            <p>${message}</p>
-            ${!currentPaymentId ? `
-                <button class="primary-btn" onclick="modal.style.display='none'; scrollToAnalyzer();">
-                    Start New Analysis
-                </button>
-            ` : ''}
-            <button class="secondary-btn" onclick="modal.style.display='none';">
-                Close
-            </button>
-        </div>
-    `;
-    
-    modalContent.innerHTML = errorHTML;
-    modal.style.display = 'block';
 }
 
 // Add this CSS to your style.css file
@@ -852,4 +810,262 @@ if (hamburger && navLinks) {
             document.body.style.overflow = '';
         });
     });
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    checkAuthStatus();
+    projectDescription.addEventListener('input', updateWordCount);
+    analyzeBtn.addEventListener('click', handleAnalyze);
+});
+
+async function initiatePayment() {
+    debugLog('Initiating payment process...');
+    
+    try {
+        // Show loading state
+        modalContent.innerHTML = `
+            <div class="loading-container">
+                <h3>Initializing Payment...</h3>
+                <p>Please wait while we prepare your payment...</p>
+                <div class="loading-spinner"></div>
+            </div>
+        `;
+        modal.style.display = 'block';
+
+        // Create Razorpay order
+        const orderResponse = await fetch('/api/create-payment', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+        
+        debugLog('Payment creation response:', {
+            status: orderResponse.status,
+            ok: orderResponse.ok
+        });
+
+        if (!orderResponse.ok) {
+            const errorData = await orderResponse.json();
+            throw new Error(errorData.error || errorData.details || 'Failed to create payment');
+        }
+
+        const orderData = await orderResponse.json();
+        debugLog('Order created:', orderData);
+
+        // Initialize Razorpay
+        const options = {
+            key: orderData.key,
+            amount: orderData.amount,
+            currency: orderData.currency,
+            name: "AI Agent vs Script Validator",
+            description: "Project Analysis Payment",
+            order_id: orderData.id,
+            prefill: {
+                name: currentUser?.name || '',
+                email: currentUser?.email || ''
+            },
+            handler: async function(response) {
+                debugLog('Payment successful, verifying...', response);
+                
+                try {
+                    const verifyResponse = await fetch('/api/verify-payment', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${authToken}`
+                        },
+                        body: JSON.stringify({
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_signature: response.razorpay_signature
+                        })
+                    });
+
+                    const verifyResult = await verifyResponse.json();
+                    debugLog('Verification result:', verifyResult);
+
+                    if (verifyResult.success) {
+                        currentPaymentId = verifyResult.paymentId;
+                        analysesRemaining = verifyResult.uploadsRemaining || 2;
+                        modal.style.display = 'none';
+                        showSuccess('Payment successful! You can now analyze your project.');
+                        updateAnalysisCount();
+                    } else {
+                        throw new Error(verifyResult.error || 'Payment verification failed');
+                    }
+                } catch (error) {
+                    debugLog('Verification error:', error);
+                    showError('Payment verification failed: ' + error.message);
+                }
+            },
+            modal: {
+                ondismiss: function() {
+                    debugLog('Payment modal dismissed');
+                    modal.style.display = 'none';
+                }
+            },
+            theme: {
+                color: "#2563eb"
+            }
+        };
+
+        // Close our loading modal before opening Razorpay
+        modal.style.display = 'none';
+
+        // Create and open Razorpay
+        const rzp = new Razorpay(options);
+        rzp.open();
+        debugLog('Razorpay modal opened');
+
+    } catch (error) {
+        debugLog('Payment initialization failed:', error);
+        showError('Failed to initialize payment: ' + error.message);
+    }
+}
+
+function showSuccess(message) {
+    const successHTML = `
+        <div class="success-container">
+            <h3>Success</h3>
+            <p>${message}</p>
+            <button class="primary-btn" onclick="modal.style.display='none';">Continue</button>
+        </div>
+    `;
+    modalContent.innerHTML = successHTML;
+    modal.style.display = 'block';
+}
+
+// Refund Functions
+async function requestRefund(paymentId, reason) {
+    try {
+        debugLog('Requesting refund for payment:', paymentId);
+        
+        const response = await fetch('/api/payment/refund', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({
+                paymentId,
+                reason
+            })
+        });
+
+        const result = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(result.error || 'Failed to process refund');
+        }
+
+        showSuccess('Refund request processed successfully');
+        return result;
+    } catch (error) {
+        debugLog('Refund request failed:', error);
+        showError(error.message);
+        throw error;
+    }
+}
+
+async function checkRefundStatus(paymentId) {
+    try {
+        debugLog('Checking refund status for payment:', paymentId);
+        
+        const response = await fetch(`/api/payment/refund/${paymentId}`, {
+            headers: {
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+
+        const result = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(result.error || 'Failed to check refund status');
+        }
+
+        return result.refund;
+    } catch (error) {
+        debugLog('Refund status check failed:', error);
+        showError(error.message);
+        throw error;
+    }
+}
+
+function showRefundModal(paymentId) {
+    modalContent.innerHTML = `
+        <div class="refund-container">
+            <h3>Request Refund</h3>
+            <p>Please provide a reason for your refund request:</p>
+            <textarea id="refundReason" rows="4" placeholder="Enter your reason here..."></textarea>
+            <div class="button-group">
+                <button onclick="submitRefund('${paymentId}')" class="primary-btn">Submit Request</button>
+                <button onclick="closeModal()" class="secondary-btn">Cancel</button>
+            </div>
+            <p class="small">Note: Refunds are only available within 24 hours of payment and if no analysis has been performed.</p>
+        </div>
+    `;
+    modal.style.display = 'block';
+}
+
+async function submitRefund(paymentId) {
+    const reasonElement = document.getElementById('refundReason');
+    const reason = reasonElement?.value?.trim();
+    
+    if (!reason) {
+        showError('Please provide a reason for the refund');
+        return;
+    }
+
+    try {
+        modalContent.innerHTML = `
+            <div class="loading-container">
+                <h3>Processing Refund...</h3>
+                <div class="loading-spinner"></div>
+            </div>
+        `;
+
+        const result = await requestRefund(paymentId, reason);
+        
+        modalContent.innerHTML = `
+            <div class="success-container">
+                <h3>Refund Processed</h3>
+                <p>Your refund has been processed successfully.</p>
+                <p>Amount: ₹${result.refund.amount/100}</p>
+                <button onclick="closeModal()" class="primary-btn">Close</button>
+            </div>
+        `;
+    } catch (error) {
+        modalContent.innerHTML = `
+            <div class="error-container">
+                <h3>Refund Failed</h3>
+                <p>${error.message}</p>
+                <button onclick="closeModal()" class="primary-btn">Close</button>
+            </div>
+        `;
+    }
+}
+
+// Add refund button to payment history
+function updatePaymentHistory(payments) {
+    const paymentList = document.getElementById('paymentHistory');
+    if (!paymentList) return;
+
+    paymentList.innerHTML = payments.map(payment => `
+        <div class="payment-item">
+            <div class="payment-info">
+                <span>Amount: ₹${payment.amount/100}</span>
+                <span>Date: ${new Date(payment.createdAt).toLocaleDateString()}</span>
+                <span>Status: ${payment.status}</span>
+            </div>
+            ${payment.status === 'completed' && !payment.refundStatus ? 
+                `<button onclick="showRefundModal('${payment.razorpayPaymentId}')" class="secondary-btn">Request Refund</button>` 
+                : payment.refundStatus ? 
+                `<span class="refund-status">Refund ${payment.refundStatus}</span>` 
+                : ''
+            }
+        </div>
+    `).join('');
 } 

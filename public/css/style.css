@@ -669,83 +669,64 @@ footer {
     min-width: 100px;
 }
 
-.user-status {
-    background: var(--background-light);
-    padding: 1rem;
-    text-align: center;
-    border-bottom: 1px solid var(--text-secondary);
-    display: block; /* Always visible */
-    margin-top: 4rem; /* Account for fixed header */
-}
-
-.user-status.logged-in {
-    background: rgba(34, 197, 94, 0.1);
-    border-color: var(--success-color);
-    color: var(--success-color);
-}
-
-.user-status.logged-out {
-    background: rgba(239, 68, 68, 0.1);
-    border-color: var(--error-color);
-    color: var(--error-color);
-}
-
-.user-status p {
-    margin: 0;
-    font-weight: 500;
-}
-
-.user-status small {
-    display: block;
-    margin-top: 0.5rem;
-    opacity: 0.8;
-}
-
-.auth-form {
-    max-width: 400px;
-    margin: 0 auto;
-    padding: 2rem;
-}
-
-.auth-form h2 {
-    text-align: center;
-    margin-bottom: 2rem;
-    color: var(--text-primary);
-}
-
-.auth-form input {
-    width: 100%;
-    padding: 0.75rem;
-    margin-bottom: 1rem;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    background: var(--background-light);
-    color: var(--text-primary);
-}
-
-.auth-form input:focus {
-    outline: none;
-    border-color: var(--primary-color);
-}
-
-.auth-form button {
-    width: 100%;
-    margin-top: 1rem;
-}
-
-.auth-form p {
-    text-align: center;
-    margin-top: 1rem;
+.auth-section small {
     color: var(--text-secondary);
 }
 
-.auth-form a {
-    color: var(--primary-color);
-    text-decoration: none;
+/* Analysis Results */
+.analysis-results {
+    padding: 2rem;
+    max-width: 600px;
+    margin: 0 auto;
 }
 
-.auth-form a:hover {
-    text-decoration: underline;
+.result-item {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: var(--background-light);
+    border-radius: 8px;
+}
+
+.result-item h3 {
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+}
+
+/* Payment Form */
+.payment-form {
+    text-align: center;
+    padding: 2rem;
+}
+
+.payment-form h2 {
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+}
+
+.payment-form p {
+    color: var(--text-secondary);
+    margin-bottom: 2rem;
+}
+
+/* Auth Section Updates */
+.auth-section {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.auth-section button {
+    min-width: 120px;
+}
+
+/* Analysis Button States */
+.analyze-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.analyze-btn.ready {
+    background: var(--primary-color);
 }
 
 /* Policy Pages */
@@ -789,4 +770,26 @@ footer {
 .policy-block li {
     margin-bottom: 0.5rem;
     line-height: 1.6;
+}
+
+.success-container {
+    text-align: center;
+    padding: 2rem;
+    background: var(--background-light);
+    border-radius: 8px;
+    margin: 1rem;
+}
+
+.success-container h3 {
+    color: var(--success-color);
+    margin-bottom: 1rem;
+}
+
+.success-container p {
+    margin-bottom: 2rem;
+    color: var(--text-secondary);
+}
+
+.success-container button {
+    margin: 0.5rem;
 } 
