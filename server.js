@@ -359,6 +359,14 @@ app.post('/api/verify-payment', auth, async (req, res) => {
     console.log('Received payment verification request:', req.body);
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
+    // Validate required fields
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({
+        error: 'Missing required payment verification fields',
+        success: false
+      });
+    }
+
     // Verify payment signature
     const body = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSignature = crypto
@@ -373,6 +381,21 @@ app.post('/api/verify-payment', auth, async (req, res) => {
       return res.status(400).json({ 
         error: 'Invalid payment signature',
         success: false 
+      });
+    }
+
+    // Find the payment first
+    const existingPayment = await prisma.payment.findFirst({
+      where: {
+        razorpayOrderId: razorpay_order_id
+      }
+    });
+
+    if (!existingPayment) {
+      console.log('Payment record not found');
+      return res.status(404).json({
+        error: 'Payment record not found',
+        success: false
       });
     }
 
@@ -392,6 +415,11 @@ app.post('/api/verify-payment', auth, async (req, res) => {
     const paymentId = razorpay_payment_id;
     createSession(paymentId);
 
+    // Set CORS headers explicitly
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'POST');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
     res.json({
       success: true,
       paymentId: paymentId,
@@ -400,10 +428,20 @@ app.post('/api/verify-payment', auth, async (req, res) => {
     });
   } catch (error) {
     console.error('Payment verification error:', error);
+    
+    // Handle specific error types
+    if (error.code === 'P2025') {
+      return res.status(404).json({
+        error: 'Payment record not found',
+        success: false,
+        details: 'The payment record could not be found or updated'
+      });
+    }
+    
     res.status(500).json({ 
       error: 'Failed to verify payment',
       success: false,
-      details: error.message 
+      details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
 });

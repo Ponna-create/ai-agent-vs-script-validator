@@ -500,10 +500,22 @@ async function initiatePayment() {
                 email: currentUser?.email || ''
             },
             handler: function(response) {
+                debugLog('Payment callback received:', response);
+                
+                // Show processing state
+                modalContent.innerHTML = `
+                    <div class="loading-container">
+                        <h3>Verifying Payment...</h3>
+                        <p>Please wait while we confirm your payment...</p>
+                        <div class="loading-spinner"></div>
+                    </div>
+                `;
+                modal.style.display = 'block';
+
                 // Return a Promise to keep the channel open
                 return new Promise(async (resolve, reject) => {
                     try {
-                        debugLog('Payment successful, verifying...', response);
+                        debugLog('Starting payment verification...', response);
                         
                         // Add retry logic for verification
                         let retryCount = 0;
@@ -525,16 +537,29 @@ async function initiatePayment() {
                                     })
                                 });
 
+                                if (!verifyResponse.ok) {
+                                    const errorData = await verifyResponse.json();
+                                    throw new Error(errorData.error || 'Payment verification failed');
+                                }
+
                                 const verifyResult = await verifyResponse.json();
                                 debugLog('Verification result:', verifyResult);
 
                                 if (verifyResult.success) {
                                     currentPaymentId = verifyResult.paymentId;
                                     analysesRemaining = verifyResult.uploadsRemaining || 2;
-                                    modal.style.display = 'none';
                                     
                                     // Check if project description is ready for analysis
                                     const words = projectDescription.value.trim().split(/\s+/).length;
+                                    
+                                    // Close Razorpay modal first
+                                    if (rzp) {
+                                        rzp.close();
+                                    }
+                                    
+                                    // Hide our processing modal
+                                    modal.style.display = 'none';
+                                    
                                     if (words >= WORD_REQUIREMENT) {
                                         // Automatically trigger analysis
                                         handleAnalyze();
@@ -543,7 +568,7 @@ async function initiatePayment() {
                                     }
                                     
                                     updateAnalysisCount();
-                                    resolve(verifyResult); // Resolve the promise
+                                    resolve(verifyResult);
                                     return true;
                                 } else {
                                     throw new Error(verifyResult.error || 'Payment verification failed');
@@ -563,8 +588,8 @@ async function initiatePayment() {
                         await verifyWithRetry();
                     } catch (error) {
                         debugLog('All verification attempts failed:', error);
-                        showError('Payment verification failed: ' + error.message + '. Please contact support if payment was deducted.');
-                        reject(error); // Reject the promise
+                        showError(`Payment verification failed: ${error.message}. If payment was deducted, please contact support with payment ID: ${response.razorpay_payment_id}`);
+                        reject(error);
                     }
                 });
             },
@@ -573,12 +598,13 @@ async function initiatePayment() {
                     debugLog('Payment modal dismissed');
                     modal.style.display = 'none';
                 },
-                escape: false, // Prevent accidental closing
+                escape: false,
+                backdropClose: false,
                 handleback: function() {
                     debugLog('Back button pressed in payment modal');
-                    return false; // Prevent back navigation
+                    return false;
                 },
-                confirm_close: true // Ask for confirmation before closing
+                confirm_close: true
             },
             theme: {
                 color: "#2563eb"
@@ -587,7 +613,7 @@ async function initiatePayment() {
                 enabled: true,
                 max_count: 3
             },
-            timeout: 900, // 15 minutes in seconds
+            timeout: 900,
             send_sms_hash: false
         };
 
