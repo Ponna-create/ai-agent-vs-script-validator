@@ -453,18 +453,16 @@ function updateAnalysisCount() {
 
 async function initiatePayment() {
     debugLog('Initiating payment process...');
-    let rzp = null;
     
     try {
         // Show loading state
-        modalContent.innerHTML = `
+        showModal(`
             <div class="loading-container">
                 <h3>Initializing Payment...</h3>
                 <p>Please wait while we prepare your payment...</p>
                 <div class="loading-spinner"></div>
             </div>
-        `;
-        modal.style.display = 'block';
+        `);
 
         // Create Razorpay order
         const orderResponse = await fetch('/api/create-payment', {
@@ -475,11 +473,6 @@ async function initiatePayment() {
             }
         });
         
-        debugLog('Payment creation response:', {
-            status: orderResponse.status,
-            ok: orderResponse.ok
-        });
-
         if (!orderResponse.ok) {
             const errorData = await orderResponse.json();
             throw new Error(errorData.error || errorData.details || 'Failed to create payment');
@@ -488,9 +481,8 @@ async function initiatePayment() {
         const orderData = await orderResponse.json();
         debugLog('Order created:', orderData);
 
-        if (!orderData.key || !orderData.amount || !orderData.currency || !orderData.id) {
-            throw new Error('Invalid order data received from server');
-        }
+        // Close loading modal
+        hideModal();
 
         // Initialize Razorpay
         const options = {
@@ -500,140 +492,71 @@ async function initiatePayment() {
             name: "AI Agent vs Script Validator",
             description: "Project Analysis Payment",
             order_id: orderData.id,
-            prefill: {
-                name: currentUser?.name || '',
-                email: currentUser?.email || ''
-            },
             handler: async function(response) {
-                debugLog('Payment callback received:', response);
+                debugLog('Payment callback received');
                 
-                if (!response.razorpay_payment_id || !response.razorpay_order_id || !response.razorpay_signature) {
-                    throw new Error('Incomplete payment response received');
-                }
-
-                // Show processing state
-                modalContent.innerHTML = `
+                showModal(`
                     <div class="loading-container">
                         <h3>Verifying Payment...</h3>
                         <p>Please wait while we confirm your payment...</p>
                         <div class="loading-spinner"></div>
                     </div>
-                `;
-                modal.style.display = 'block';
+                `);
 
                 try {
-                    debugLog('Starting payment verification...', response);
-                    
-                    // Add retry logic for verification
-                    let retryCount = 0;
-                    const maxRetries = 3;
-                    const retryDelay = 2000; // 2 seconds
+                    const verifyResponse = await fetch('/api/verify-payment', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${authToken}`
+                        },
+                        body: JSON.stringify({
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_signature: response.razorpay_signature
+                        })
+                    });
 
-                    async function verifyWithRetry() {
-                        try {
-                            const verifyResponse = await fetch('/api/verify-payment', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'Authorization': `Bearer ${authToken}`
-                                },
-                                body: JSON.stringify({
-                                    razorpay_payment_id: response.razorpay_payment_id,
-                                    razorpay_order_id: response.razorpay_order_id,
-                                    razorpay_signature: response.razorpay_signature
-                                })
-                            });
+                    const verifyResult = await verifyResponse.json();
 
-                            const verifyResult = await verifyResponse.json();
-                            debugLog('Verification response:', verifyResult);
-
-                            if (!verifyResponse.ok) {
-                                throw new Error(verifyResult.error || verifyResult.details || 'Payment verification failed');
-                            }
-
-                            if (verifyResult.success) {
-                                currentPaymentId = verifyResult.paymentId;
-                                analysesRemaining = verifyResult.uploadsRemaining || 1;
-                                
-                                // Check if project description is ready for analysis
-                                const words = projectDescription.value.trim().split(/\s+/).length;
-                                
-                                // Close Razorpay modal first
-                                if (rzp) {
-                                    rzp.close();
-                                }
-                                
-                                // Hide our processing modal
-                                modal.style.display = 'none';
-                                
-                                if (words >= WORD_REQUIREMENT) {
-                                    // Automatically trigger analysis
-                                    handleAnalyze();
-                                } else {
-                                    showSuccess('Payment successful! Please enter your project description to start analysis.');
-                                }
-                                
-                                updateAnalysisCount();
-                                return true;
-                            } else {
-                                throw new Error('Payment verification failed');
-                            }
-                        } catch (error) {
-                            debugLog('Verification attempt failed:', error);
-                            if (retryCount < maxRetries) {
-                                retryCount++;
-                                debugLog(`Retrying verification (${retryCount}/${maxRetries})...`);
-                                await new Promise(resolve => setTimeout(resolve, retryDelay));
-                                return verifyWithRetry();
-                            }
-                            throw error;
-                        }
+                    if (!verifyResponse.ok) {
+                        throw new Error(verifyResult.error || 'Payment verification failed');
                     }
 
-                    await verifyWithRetry();
+                    if (verifyResult.success) {
+                        currentPaymentId = response.razorpay_payment_id;
+                        analysesRemaining = 1;
+                        
+                        hideModal();
+                        showSuccess('Payment successful! You can now proceed with the analysis.');
+                        updateAnalysisCount();
+                    } else {
+                        throw new Error('Payment verification failed');
+                    }
                 } catch (error) {
-                    debugLog('All verification attempts failed:', error);
-                    showError(`Payment verification failed: ${error.message}. If payment was deducted, please contact support with payment ID: ${response.razorpay_payment_id}`);
-                    throw error;
+                    debugLog('Payment verification failed:', error);
+                    showError(`Payment verification failed. If amount was deducted, please contact support with payment ID: ${response.razorpay_payment_id}`);
                 }
             },
-            modal: {
-                ondismiss: function() {
-                    debugLog('Payment modal dismissed');
-                    modal.style.display = 'none';
-                },
-                escape: false,
-                backdropClose: false,
-                handleback: function() {
-                    debugLog('Back button pressed in payment modal');
-                    return false;
-                },
-                confirm_close: true
+            prefill: {
+                name: currentUser?.name || '',
+                email: currentUser?.email || ''
             },
             theme: {
                 color: "#2563eb"
-            },
-            retry: {
-                enabled: true,
-                max_count: 3
-            },
-            timeout: 900
+            }
         };
 
-        // Close our loading modal before opening Razorpay
-        modal.style.display = 'none';
-
-        // Create and open Razorpay
-        rzp = new Razorpay(options);
+        const rzp = new Razorpay(options);
+        rzp.on('payment.failed', function(response) {
+            debugLog('Payment failed:', response.error);
+            showError(`Payment failed: ${response.error.description}`);
+        });
+        
         rzp.open();
-        debugLog('Razorpay modal opened');
-
     } catch (error) {
         debugLog('Payment initialization failed:', error);
         showError('Failed to initialize payment: ' + error.message);
-        if (rzp) {
-            rzp.close();
-        }
     }
 }
 
