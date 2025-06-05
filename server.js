@@ -168,27 +168,80 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "https://api.razorpay.com", "https://checkout.razorpay.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com", "https://fonts.googleapis.com", "data:"],
+      scriptSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "https://checkout.razorpay.com",
+        "https://*.razorpay.com"
+      ],
+      styleSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "https://fonts.googleapis.com",
+        "https://*.razorpay.com"
+      ],
+      imgSrc: [
+        "'self'",
+        "data:",
+        "https:",
+        "https://*.razorpay.com"
+      ],
+      connectSrc: [
+        "'self'",
+        "https://api.razorpay.com",
+        "https://checkout.razorpay.com",
+        "https://*.razorpay.com"
+      ],
+      fontSrc: [
+        "'self'",
+        "https://fonts.gstatic.com",
+        "https://fonts.googleapis.com",
+        "data:"
+      ],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
-      frameSrc: ["'self'", "https://api.razorpay.com", "https://checkout.razorpay.com"],
-      scriptSrcElem: ["'self'", "https://checkout.razorpay.com"],
-      frameAncestors: ["'self'"]
+      frameSrc: [
+        "'self'",
+        "https://api.razorpay.com",
+        "https://checkout.razorpay.com",
+        "https://*.razorpay.com"
+      ],
+      frameAncestors: ["'self'"],
+      formAction: ["'self'"],
+      baseUri: ["'self'"],
+      manifestSrc: ["'self'"],
+      workerSrc: ["'self'", "blob:"],
+      childSrc: ["'self'", "blob:"],
+      upgradeInsecureRequests: []
     }
-  }
+  },
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginOpenerPolicy: { policy: "same-origin" }
 }));
 
 // Configure CORS with proper options
 const corsOptions = {
-  origin: true, // Allow all origins
+  origin: [
+    'https://checkout.razorpay.com',
+    'https://api.razorpay.com',
+    'https://*.razorpay.com'
+  ],
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'Access-Control-Allow-Headers',
+    'Access-Control-Allow-Origin',
+    'X-CSRF-Token'
+  ],
   credentials: true,
-  maxAge: 86400 // 24 hours
+  maxAge: 86400, // 24 hours
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 };
 
 app.use(cors(corsOptions));
@@ -378,44 +431,7 @@ app.post('/api/verify-payment', auth, async (req, res) => {
       });
     }
 
-    // Verify payment signature
-    const body = razorpay_order_id + "|" + razorpay_payment_id;
-    const expectedSignature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-      .update(body.toString())
-      .digest("hex");
-
-    const isAuthentic = expectedSignature === razorpay_signature;
-
-    if (!isAuthentic) {
-      console.log('Signature verification failed:', {
-        expected: expectedSignature,
-        received: razorpay_signature
-      });
-      return res.status(400).json({ 
-        error: 'Invalid payment signature',
-        success: false,
-        details: 'Payment signature verification failed'
-      });
-    }
-
-    // Find the payment first
-    const existingPayment = await prisma.payment.findFirst({
-      where: {
-        razorpayOrderId: razorpay_order_id
-      }
-    });
-
-    if (!existingPayment) {
-      console.log('Payment record not found for order:', razorpay_order_id);
-      return res.status(404).json({
-        error: 'Payment record not found',
-        success: false,
-        details: 'No payment record found for this order ID'
-      });
-    }
-
-    // Verify payment with Razorpay
+    // First verify the payment with Razorpay
     try {
       const paymentVerification = await razorpay.payments.fetch(razorpay_payment_id);
       console.log('Razorpay payment verification:', paymentVerification);
@@ -423,52 +439,84 @@ app.post('/api/verify-payment', auth, async (req, res) => {
       if (paymentVerification.status !== 'captured') {
         throw new Error(`Payment not captured. Status: ${paymentVerification.status}`);
       }
+
+      // Verify payment signature after confirming payment status
+      const body = razorpay_order_id + "|" + razorpay_payment_id;
+      const expectedSignature = crypto
+        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+        .update(body.toString())
+        .digest("hex");
+
+      const isAuthentic = expectedSignature === razorpay_signature;
+
+      if (!isAuthentic) {
+        console.log('Signature verification failed:', {
+          expected: expectedSignature,
+          received: razorpay_signature
+        });
+        return res.status(400).json({ 
+          error: 'Invalid payment signature',
+          success: false,
+          details: 'Payment signature verification failed'
+        });
+      }
+
+      // Find the payment record
+      const existingPayment = await prisma.payment.findFirst({
+        where: {
+          razorpayOrderId: razorpay_order_id
+        }
+      });
+
+      if (!existingPayment) {
+        console.log('Payment record not found for order:', razorpay_order_id);
+        return res.status(404).json({
+          error: 'Payment record not found',
+          success: false,
+          details: 'No payment record found for this order ID'
+        });
+      }
+
+      // Update payment record
+      const payment = await prisma.payment.update({
+        where: {
+          razorpayOrderId: razorpay_order_id,
+          userId: req.user.id
+        },
+        data: {
+          razorpayPaymentId: razorpay_payment_id,
+          status: 'completed'
+        }
+      });
+
+      // Create new session
+      const paymentId = razorpay_payment_id;
+      createSession(paymentId);
+
+      console.log('Payment verification successful:', {
+        paymentId,
+        userId: req.user.id,
+        orderId: razorpay_order_id
+      });
+
+      res.json({
+        success: true,
+        paymentId: paymentId,
+        message: 'Payment verified successfully',
+        uploadsRemaining: 1
+      });
+
     } catch (razorpayError) {
       console.error('Razorpay verification failed:', razorpayError);
       return res.status(400).json({
         error: 'Payment verification failed',
         success: false,
-        details: 'Failed to verify payment with Razorpay'
+        details: razorpayError.message || 'Failed to verify payment with Razorpay'
       });
     }
-
-    // Update payment record in database
-    const payment = await prisma.payment.update({
-      where: {
-        razorpayOrderId: razorpay_order_id,
-        userId: req.user.id
-      },
-      data: {
-        razorpayPaymentId: razorpay_payment_id,
-        status: 'completed'
-      }
-    });
-
-    // Create new session
-    const paymentId = razorpay_payment_id;
-    createSession(paymentId);
-
-    // Set CORS headers explicitly
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'POST');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-    console.log('Payment verification successful:', {
-      paymentId,
-      userId: req.user.id,
-      orderId: razorpay_order_id
-    });
-
-    res.json({
-      success: true,
-      paymentId: paymentId,
-      message: 'Payment verified successfully',
-      uploadsRemaining: 1
-    });
   } catch (error) {
     console.error('Payment verification error:', error);
     
-    // Handle specific error types
     if (error.code === 'P2025') {
       return res.status(404).json({
         error: 'Payment record not found',
