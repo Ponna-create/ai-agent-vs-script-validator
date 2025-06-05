@@ -532,7 +532,16 @@ async function initiatePayment() {
                                     currentPaymentId = verifyResult.paymentId;
                                     analysesRemaining = verifyResult.uploadsRemaining || 2;
                                     modal.style.display = 'none';
-                                    showSuccess('Payment successful! You can now analyze your project.');
+                                    
+                                    // Check if project description is ready for analysis
+                                    const words = projectDescription.value.trim().split(/\s+/).length;
+                                    if (words >= WORD_REQUIREMENT) {
+                                        // Automatically trigger analysis
+                                        handleAnalyze();
+                                    } else {
+                                        showSuccess('Payment successful! Please enter your project description to start analysis.');
+                                    }
+                                    
                                     updateAnalysisCount();
                                     resolve(verifyResult); // Resolve the promise
                                     return true;
