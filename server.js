@@ -87,7 +87,7 @@ const sessions = new Map();
 // Session management functions
 function createSession(paymentId) {
   sessions.set(paymentId, {
-    uploadsRemaining: 2, // Allow 2 re-uploads
+    uploadsRemaining: 1, // Allow 1 re-upload
     created: Date.now(),
     lastUpload: Date.now()
   });
@@ -310,7 +310,7 @@ app.post('/api/create-payment', auth, checkRazorpay, async (req, res) => {
 
     // Create order options
     const options = {
-      amount: 69900, // amount in smallest currency unit (paise)
+      amount: 19900, // amount in smallest currency unit (paise)
       currency: "INR",
       receipt: `receipt_${Date.now()}`,
       notes: {
@@ -424,7 +424,7 @@ app.post('/api/verify-payment', auth, async (req, res) => {
       success: true,
       paymentId: paymentId,
       message: 'Payment verified successfully',
-      uploadsRemaining: 2
+      uploadsRemaining: 1
     });
   } catch (error) {
     console.error('Payment verification error:', error);

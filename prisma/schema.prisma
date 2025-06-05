@@ -43,7 +43,7 @@ model Payment {
   status          String     // pending, completed, failed, refunded
   createdAt       DateTime   @default(now())
   analyses        Analysis[]
-  uploadsRemaining Int       @default(2)
+  uploadsRemaining Int       @default(1)
   refundStatus    String?    // requested, processed, rejected
   refundReason    String?    @db.Text
   refundedAt      DateTime?

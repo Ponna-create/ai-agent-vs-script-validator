@@ -13,8 +13,8 @@ const navLinks = document.querySelector('.nav-links');
 
 // Constants
 const WORD_REQUIREMENT = 450;
-const ANALYSIS_PRICE = 699;
-const MAX_ANALYSES = 2;
+const ANALYSIS_PRICE = 199;
+const MAX_ANALYSES = 1;
 
 // Add session management
 let currentPaymentId = null;
@@ -425,7 +425,7 @@ function showPaymentModal() {
     modalContent.innerHTML = `
         <div class="payment-form">
             <h2>Purchase Analysis Credits</h2>
-            <p>Get 2 more project analyses for ₹${ANALYSIS_PRICE}</p>
+            <p>Get 1 project analysis for ₹${ANALYSIS_PRICE}</p>
             <button onclick="initiatePayment()" class="primary-btn">Pay ₹${ANALYSIS_PRICE}</button>
         </div>
     `;
@@ -547,7 +547,7 @@ async function initiatePayment() {
 
                                 if (verifyResult.success) {
                                     currentPaymentId = verifyResult.paymentId;
-                                    analysesRemaining = verifyResult.uploadsRemaining || 2;
+                                    analysesRemaining = verifyResult.uploadsRemaining || 1;
                                     
                                     // Check if project description is ready for analysis
                                     const words = projectDescription.value.trim().split(/\s+/).length;
