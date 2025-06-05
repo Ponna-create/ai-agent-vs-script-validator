@@ -27,7 +27,7 @@ const PORT = process.env.PORT || 3000;
 // Initialize Prisma
 const prisma = new PrismaClient();
 
-// Initialize Razorpay with better error handling
+// Initialize Razorpay
 let razorpay;
 try {
     if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
@@ -326,36 +326,25 @@ app.post('/api/create-payment', auth, checkRazorpay, async (req, res) => {
     try {
         console.log('Creating Razorpay order...');
         
-        // Create order options
+        // Create order with minimum required fields
         const options = {
-            amount: 19900,
+            amount: 19900,  // amount in paisa
             currency: "INR",
-            receipt: `receipt_${Date.now()}`,
-            payment_capture: 1,
-            notes: {
-                type: "project_analysis",
-                userId: req.user.id
-            }
+            receipt: `order_rcptid_${Date.now()}`,
+            payment_capture: 1
         };
 
-        // Create order using /v1/orders endpoint
-        let order;
-        try {
-            order = await razorpay.orders.create(options);
-            console.log('Order created:', order.id);
-        } catch (razorpayError) {
-            console.error('Razorpay order creation error:', razorpayError);
-            return res.status(400).json({
-                error: 'Failed to create payment order',
-                details: razorpayError.error?.description || razorpayError.message
-            });
-        }
+        console.log('Creating order with options:', options);
+
+        const order = await razorpay.orders.create(options);
+        
+        console.log('Order created successfully:', order);
 
         if (!order.id) {
-            throw new Error('Failed to create order - no order ID received');
+            throw new Error('Order creation failed - no order ID received');
         }
 
-        // Create payment record in database
+        // Store order in database
         await prisma.payment.create({
             data: {
                 userId: req.user.id,
@@ -365,12 +354,12 @@ app.post('/api/create-payment', auth, checkRazorpay, async (req, res) => {
             }
         });
 
-        // Send minimal required data to frontend
+        // Send only required data to frontend
         res.json({
             key: process.env.RAZORPAY_KEY_ID,
-            orderId: order.id,
             amount: order.amount,
-            currency: order.currency
+            order_id: order.id,  // This is what Razorpay expects in frontend
+            currency: "INR"
         });
     } catch (error) {
         console.error('Payment creation error:', error);

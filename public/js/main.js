@@ -464,7 +464,7 @@ async function initiatePayment() {
             </div>
         `);
 
-        // Create Razorpay order
+        // Get order details from backend
         const orderResponse = await fetch('/api/create-payment', {
             method: 'POST',
             headers: {
@@ -481,25 +481,25 @@ async function initiatePayment() {
         const orderData = await orderResponse.json();
         debugLog('Order created:', orderData);
 
-        if (!orderData.key || !orderData.amount || !orderData.orderId) {
+        if (!orderData.key || !orderData.order_id || !orderData.amount) {
             throw new Error('Invalid order data received');
         }
 
         hideModal();
 
-        // Initialize Razorpay with correct options
+        // Initialize Razorpay checkout
         const options = {
             key: orderData.key,
             amount: orderData.amount,
-            currency: orderData.currency || 'INR',
+            currency: orderData.currency,
             name: "AI Agent vs Script Validator",
             description: "Project Analysis Payment",
-            image: "/images/logo.png",
-            order_id: orderData.orderId,
+            order_id: orderData.order_id,
             handler: async function(response) {
                 debugLog('Payment callback received:', {
                     paymentId: response.razorpay_payment_id,
-                    orderId: response.razorpay_order_id
+                    orderId: response.razorpay_order_id,
+                    signature: response.razorpay_signature
                 });
 
                 showModal(`
@@ -547,30 +547,22 @@ async function initiatePayment() {
             },
             prefill: {
                 name: currentUser?.name || '',
-                email: currentUser?.email || '',
-                contact: currentUser?.phone || ''
+                email: currentUser?.email || ''
             },
             theme: {
                 color: "#2563eb"
-            },
-            modal: {
-                ondismiss: function() {
-                    debugLog('Payment modal dismissed');
-                    hideModal();
-                }
             }
         };
 
+        // Create new instance and open checkout
         rzp = new Razorpay(options);
         rzp.on('payment.failed', function(response) {
             debugLog('Payment failed:', response.error);
             showError(`Payment failed: ${response.error.description}`);
         });
 
-        // Store instance and open payment modal
-        window.rzp = rzp;
         rzp.open();
-        debugLog('Razorpay modal opened');
+        debugLog('Razorpay checkout opened');
     } catch (error) {
         debugLog('Payment initialization failed:', error);
         showError('Failed to initialize payment: ' + error.message);
