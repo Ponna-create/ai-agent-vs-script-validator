@@ -30,52 +30,29 @@ const prisma = new PrismaClient();
 // Initialize Razorpay with better error handling
 let razorpay;
 try {
-    // Check if environment variables are loaded
     if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-        console.error('Razorpay environment variables are missing:');
-        console.error(`RAZORPAY_KEY_ID: ${process.env.RAZORPAY_KEY_ID ? 'Present' : 'Missing'}`);
-        console.error(`RAZORPAY_KEY_SECRET: ${process.env.RAZORPAY_KEY_SECRET ? 'Present' : 'Missing'}`);
-        
-        // In production, we'll throw an error
-        if (process.env.NODE_ENV === 'production') {
-            throw new Error('Razorpay credentials are not configured. Please check environment variables.');
-        }
-        // In development, we'll create a mock instance
-        razorpay = {
-            orders: {
-                create: () => Promise.resolve({ 
-                    id: 'test_order_' + Date.now(),
-                    amount: 69900,
-                    currency: 'INR',
-                    status: 'created'
-                })
-            }
-        };
-        console.log('Created mock Razorpay instance for development');
-    } else {
-        // Initialize real Razorpay instance
-        razorpay = new Razorpay({
-            key_id: process.env.RAZORPAY_KEY_ID,
-            key_secret: process.env.RAZORPAY_KEY_SECRET
-        });
-        console.log('Razorpay initialized successfully with real credentials');
+        throw new Error('Razorpay credentials missing');
     }
-} catch (error) {
-    console.error('Failed to initialize Razorpay:', error);
-    // Create a mock instance that returns errors
-    razorpay = {
-        orders: {
-            create: () => Promise.reject(new Error('Payment service initialization failed: ' + error.message))
+    razorpay = new Razorpay({
+        key_id: process.env.RAZORPAY_KEY_ID,
+        key_secret: process.env.RAZORPAY_KEY_SECRET,
+        headers: {
+            "Content-Type": "application/json"
         }
-    };
+    });
+    console.log('Razorpay initialized successfully');
+} catch (error) {
+    console.error('Razorpay initialization error:', error);
+    razorpay = null;
 }
 
 // Middleware to check Razorpay initialization
 const checkRazorpay = (req, res, next) => {
     if (!razorpay) {
+        console.error('Razorpay not initialized');
         return res.status(503).json({
             error: 'Payment service unavailable',
-            details: 'Payment system is not properly configured. Please check server logs.'
+            details: 'Payment system is not properly configured'
         });
     }
     next();
@@ -349,120 +326,135 @@ app.use((err, req, res, next) => {
 
 // Create Razorpay order
 app.post('/api/create-payment', auth, checkRazorpay, async (req, res) => {
-  try {
-    console.log('Creating Razorpay order...');
-    
-    // Create order options
-    const options = {
-      amount: 19900,
-      currency: "INR",
-      receipt: `receipt_${Date.now()}`,
-      notes: {
-        type: "project_analysis",
-        userId: req.user.id
-      }
-    };
+    try {
+        console.log('Creating Razorpay order...');
+        
+        // Create order options
+        const options = {
+            amount: 19900,
+            currency: "INR",
+            receipt: `receipt_${Date.now()}`,
+            payment_capture: 1, // Auto capture payment
+            notes: {
+                type: "project_analysis",
+                userId: req.user.id
+            }
+        };
 
-    // Create order
-    const order = await razorpay.orders.create(options);
-    console.log('Order created:', order.id);
+        // Create order
+        const order = await razorpay.orders.create(options);
+        console.log('Order created:', order.id);
 
-    // Create payment record in database
-    await prisma.payment.create({
-      data: {
-        userId: req.user.id,
-        razorpayOrderId: order.id,
-        amount: options.amount,
-        status: 'pending'
-      }
-    });
+        if (!order.id) {
+            throw new Error('Failed to create order');
+        }
 
-    res.json({
-      id: order.id,
-      amount: options.amount,
-      currency: options.currency,
-      key: process.env.RAZORPAY_KEY_ID
-    });
-  } catch (error) {
-    console.error('Payment creation error:', error);
-    res.status(500).json({
-      error: 'Failed to create payment',
-      details: error.message
-    });
-  }
+        // Create payment record in database
+        await prisma.payment.create({
+            data: {
+                userId: req.user.id,
+                razorpayOrderId: order.id,
+                amount: options.amount,
+                status: 'pending'
+            }
+        });
+
+        // Send response with key and order details
+        res.json({
+            key: process.env.RAZORPAY_KEY_ID,
+            amount: order.amount,
+            currency: order.currency,
+            id: order.id,
+            receipt: order.receipt
+        });
+    } catch (error) {
+        console.error('Payment creation error:', error);
+        res.status(500).json({
+            error: 'Failed to create payment',
+            details: error.message
+        });
+    }
 });
 
 // Verify Razorpay payment
-app.post('/api/verify-payment', auth, async (req, res) => {
-  try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-      return res.status(400).json({
-        error: 'Missing payment verification fields',
-        success: false
-      });
-    }
-
-    // First verify the payment with Razorpay
+app.post('/api/verify-payment', auth, checkRazorpay, async (req, res) => {
     try {
-      const payment = await razorpay.payments.fetch(razorpay_payment_id);
-      
-      if (payment.status !== 'captured') {
-        return res.status(400).json({
-          error: 'Payment not captured',
-          success: false,
-          details: `Payment status: ${payment.status}`
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+        console.log('Verifying payment:', {
+            orderId: razorpay_order_id,
+            paymentId: razorpay_payment_id
         });
-      }
-    } catch (razorpayError) {
-      console.error('Razorpay API error:', razorpayError);
-      return res.status(400).json({
-        error: 'Failed to verify payment with Razorpay',
-        success: false,
-        details: razorpayError.message
-      });
+
+        if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+            return res.status(400).json({
+                error: 'Missing payment verification fields',
+                success: false
+            });
+        }
+
+        // First verify the payment with Razorpay
+        try {
+            const payment = await razorpay.payments.fetch(razorpay_payment_id);
+            console.log('Payment details:', payment);
+            
+            if (payment.status !== 'captured') {
+                return res.status(400).json({
+                    error: 'Payment not captured',
+                    success: false,
+                    details: `Payment status: ${payment.status}`
+                });
+            }
+
+            // Verify signature
+            const body = razorpay_order_id + "|" + razorpay_payment_id;
+            const expectedSignature = crypto
+                .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+                .update(body.toString())
+                .digest("hex");
+
+            if (expectedSignature !== razorpay_signature) {
+                return res.status(400).json({
+                    error: 'Invalid payment signature',
+                    success: false
+                });
+            }
+
+            // Update payment record
+            await prisma.payment.updateMany({
+                where: {
+                    razorpayOrderId: razorpay_order_id,
+                    userId: req.user.id,
+                    status: 'pending'
+                },
+                data: {
+                    razorpayPaymentId: razorpay_payment_id,
+                    status: 'completed'
+                }
+            });
+
+            console.log('Payment verification successful');
+
+            res.json({
+                success: true,
+                message: 'Payment verified successfully'
+            });
+        } catch (razorpayError) {
+            console.error('Razorpay API error:', razorpayError);
+            return res.status(400).json({
+                error: 'Failed to verify payment with Razorpay',
+                success: false,
+                details: razorpayError.message
+            });
+        }
+    } catch (error) {
+        console.error('Payment verification error:', error);
+        res.status(500).json({
+            error: 'Payment verification failed',
+            success: false,
+            details: error.message
+        });
     }
-
-    // Verify signature
-    const body = razorpay_order_id + "|" + razorpay_payment_id;
-    const expectedSignature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-      .update(body.toString())
-      .digest("hex");
-
-    if (expectedSignature !== razorpay_signature) {
-      return res.status(400).json({
-        error: 'Invalid payment signature',
-        success: false
-      });
-    }
-
-    // Update payment record
-    await prisma.payment.updateMany({
-      where: {
-        razorpayOrderId: razorpay_order_id,
-        userId: req.user.id,
-        status: 'pending'
-      },
-      data: {
-        razorpayPaymentId: razorpay_payment_id,
-        status: 'completed'
-      }
-    });
-
-    res.json({
-      success: true,
-      message: 'Payment verified successfully'
-    });
-  } catch (error) {
-    console.error('Payment verification error:', error);
-    res.status(500).json({
-      error: 'Payment verification failed',
-      success: false,
-      details: error.message
-    });
-  }
 });
 
 // Upload and analyze markdown route

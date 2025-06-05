@@ -453,9 +453,9 @@ function updateAnalysisCount() {
 
 async function initiatePayment() {
     debugLog('Initiating payment process...');
+    let rzp = null;
     
     try {
-        // Show loading state
         showModal(`
             <div class="loading-container">
                 <h3>Initializing Payment...</h3>
@@ -472,7 +472,7 @@ async function initiatePayment() {
                 'Authorization': `Bearer ${authToken}`
             }
         });
-        
+
         if (!orderResponse.ok) {
             const errorData = await orderResponse.json();
             throw new Error(errorData.error || errorData.details || 'Failed to create payment');
@@ -481,7 +481,10 @@ async function initiatePayment() {
         const orderData = await orderResponse.json();
         debugLog('Order created:', orderData);
 
-        // Close loading modal
+        if (!orderData.key || !orderData.amount || !orderData.currency || !orderData.id) {
+            throw new Error('Invalid order data received');
+        }
+
         hideModal();
 
         // Initialize Razorpay
@@ -492,9 +495,16 @@ async function initiatePayment() {
             name: "AI Agent vs Script Validator",
             description: "Project Analysis Payment",
             order_id: orderData.id,
+            prefill: {
+                name: currentUser?.name || '',
+                email: currentUser?.email || ''
+            },
             handler: async function(response) {
-                debugLog('Payment callback received');
-                
+                debugLog('Payment callback received:', {
+                    paymentId: response.razorpay_payment_id,
+                    orderId: response.razorpay_order_id
+                });
+
                 showModal(`
                     <div class="loading-container">
                         <h3>Verifying Payment...</h3>
@@ -518,15 +528,15 @@ async function initiatePayment() {
                     });
 
                     const verifyResult = await verifyResponse.json();
+                    debugLog('Verification result:', verifyResult);
 
                     if (!verifyResponse.ok) {
-                        throw new Error(verifyResult.error || 'Payment verification failed');
+                        throw new Error(verifyResult.error || verifyResult.details || 'Payment verification failed');
                     }
 
                     if (verifyResult.success) {
                         currentPaymentId = response.razorpay_payment_id;
                         analysesRemaining = 1;
-                        
                         hideModal();
                         showSuccess('Payment successful! You can now proceed with the analysis.');
                         updateAnalysisCount();
@@ -538,25 +548,31 @@ async function initiatePayment() {
                     showError(`Payment verification failed. If amount was deducted, please contact support with payment ID: ${response.razorpay_payment_id}`);
                 }
             },
-            prefill: {
-                name: currentUser?.name || '',
-                email: currentUser?.email || ''
+            modal: {
+                ondismiss: function() {
+                    debugLog('Payment modal dismissed');
+                    hideModal();
+                }
             },
             theme: {
                 color: "#2563eb"
             }
         };
 
-        const rzp = new Razorpay(options);
+        rzp = new Razorpay(options);
         rzp.on('payment.failed', function(response) {
             debugLog('Payment failed:', response.error);
             showError(`Payment failed: ${response.error.description}`);
         });
-        
+
         rzp.open();
+        debugLog('Razorpay modal opened');
     } catch (error) {
         debugLog('Payment initialization failed:', error);
         showError('Failed to initialize payment: ' + error.message);
+        if (rzp) {
+            rzp.close();
+        }
     }
 }
 
