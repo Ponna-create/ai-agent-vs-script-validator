@@ -481,24 +481,21 @@ async function initiatePayment() {
         const orderData = await orderResponse.json();
         debugLog('Order created:', orderData);
 
-        if (!orderData.key || !orderData.amount || !orderData.currency || !orderData.id) {
+        if (!orderData.key || !orderData.amount || !orderData.orderId) {
             throw new Error('Invalid order data received');
         }
 
         hideModal();
 
-        // Initialize Razorpay
+        // Initialize Razorpay with correct options
         const options = {
             key: orderData.key,
             amount: orderData.amount,
-            currency: orderData.currency,
+            currency: orderData.currency || 'INR',
             name: "AI Agent vs Script Validator",
             description: "Project Analysis Payment",
-            order_id: orderData.id,
-            prefill: {
-                name: currentUser?.name || '',
-                email: currentUser?.email || ''
-            },
+            image: "/images/logo.png",
+            order_id: orderData.orderId,
             handler: async function(response) {
                 debugLog('Payment callback received:', {
                     paymentId: response.razorpay_payment_id,
@@ -548,14 +545,19 @@ async function initiatePayment() {
                     showError(`Payment verification failed. If amount was deducted, please contact support with payment ID: ${response.razorpay_payment_id}`);
                 }
             },
+            prefill: {
+                name: currentUser?.name || '',
+                email: currentUser?.email || '',
+                contact: currentUser?.phone || ''
+            },
+            theme: {
+                color: "#2563eb"
+            },
             modal: {
                 ondismiss: function() {
                     debugLog('Payment modal dismissed');
                     hideModal();
                 }
-            },
-            theme: {
-                color: "#2563eb"
             }
         };
 
@@ -565,6 +567,8 @@ async function initiatePayment() {
             showError(`Payment failed: ${response.error.description}`);
         });
 
+        // Store instance and open payment modal
+        window.rzp = rzp;
         rzp.open();
         debugLog('Razorpay modal opened');
     } catch (error) {
@@ -573,6 +577,15 @@ async function initiatePayment() {
         if (rzp) {
             rzp.close();
         }
+    }
+}
+
+// Add this function to handle payment retry
+function retryPayment() {
+    if (window.rzp) {
+        window.rzp.open();
+    } else {
+        initiatePayment();
     }
 }
 

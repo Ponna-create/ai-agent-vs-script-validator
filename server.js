@@ -35,10 +35,7 @@ try {
     }
     razorpay = new Razorpay({
         key_id: process.env.RAZORPAY_KEY_ID,
-        key_secret: process.env.RAZORPAY_KEY_SECRET,
-        headers: {
-            "Content-Type": "application/json"
-        }
+        key_secret: process.env.RAZORPAY_KEY_SECRET
     });
     console.log('Razorpay initialized successfully');
 } catch (error) {
@@ -334,19 +331,28 @@ app.post('/api/create-payment', auth, checkRazorpay, async (req, res) => {
             amount: 19900,
             currency: "INR",
             receipt: `receipt_${Date.now()}`,
-            payment_capture: 1, // Auto capture payment
+            payment_capture: 1,
             notes: {
                 type: "project_analysis",
                 userId: req.user.id
             }
         };
 
-        // Create order
-        const order = await razorpay.orders.create(options);
-        console.log('Order created:', order.id);
+        // Create order using /v1/orders endpoint
+        let order;
+        try {
+            order = await razorpay.orders.create(options);
+            console.log('Order created:', order.id);
+        } catch (razorpayError) {
+            console.error('Razorpay order creation error:', razorpayError);
+            return res.status(400).json({
+                error: 'Failed to create payment order',
+                details: razorpayError.error?.description || razorpayError.message
+            });
+        }
 
         if (!order.id) {
-            throw new Error('Failed to create order');
+            throw new Error('Failed to create order - no order ID received');
         }
 
         // Create payment record in database
@@ -359,13 +365,12 @@ app.post('/api/create-payment', auth, checkRazorpay, async (req, res) => {
             }
         });
 
-        // Send response with key and order details
+        // Send minimal required data to frontend
         res.json({
             key: process.env.RAZORPAY_KEY_ID,
+            orderId: order.id,
             amount: order.amount,
-            currency: order.currency,
-            id: order.id,
-            receipt: order.receipt
+            currency: order.currency
         });
     } catch (error) {
         console.error('Payment creation error:', error);
