@@ -453,6 +453,7 @@ function updateAnalysisCount() {
 
 async function initiatePayment() {
     debugLog('Initiating payment process...');
+    let rzp = null;
     
     try {
         // Show loading state
@@ -487,6 +488,10 @@ async function initiatePayment() {
         const orderData = await orderResponse.json();
         debugLog('Order created:', orderData);
 
+        if (!orderData.key || !orderData.amount || !orderData.currency || !orderData.id) {
+            throw new Error('Invalid order data received from server');
+        }
+
         // Initialize Razorpay
         const options = {
             key: orderData.key,
@@ -499,9 +504,13 @@ async function initiatePayment() {
                 name: currentUser?.name || '',
                 email: currentUser?.email || ''
             },
-            handler: function(response) {
+            handler: async function(response) {
                 debugLog('Payment callback received:', response);
                 
+                if (!response.razorpay_payment_id || !response.razorpay_order_id || !response.razorpay_signature) {
+                    throw new Error('Incomplete payment response received');
+                }
+
                 // Show processing state
                 modalContent.innerHTML = `
                     <div class="loading-container">
@@ -512,86 +521,81 @@ async function initiatePayment() {
                 `;
                 modal.style.display = 'block';
 
-                // Return a Promise to keep the channel open
-                return new Promise(async (resolve, reject) => {
-                    try {
-                        debugLog('Starting payment verification...', response);
-                        
-                        // Add retry logic for verification
-                        let retryCount = 0;
-                        const maxRetries = 3;
-                        const retryDelay = 2000; // 2 seconds
+                try {
+                    debugLog('Starting payment verification...', response);
+                    
+                    // Add retry logic for verification
+                    let retryCount = 0;
+                    const maxRetries = 3;
+                    const retryDelay = 2000; // 2 seconds
 
-                        async function verifyWithRetry() {
-                            try {
-                                const verifyResponse = await fetch('/api/verify-payment', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'Authorization': `Bearer ${authToken}`
-                                    },
-                                    body: JSON.stringify({
-                                        razorpay_payment_id: response.razorpay_payment_id,
-                                        razorpay_order_id: response.razorpay_order_id,
-                                        razorpay_signature: response.razorpay_signature
-                                    })
-                                });
+                    async function verifyWithRetry() {
+                        try {
+                            const verifyResponse = await fetch('/api/verify-payment', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${authToken}`
+                                },
+                                body: JSON.stringify({
+                                    razorpay_payment_id: response.razorpay_payment_id,
+                                    razorpay_order_id: response.razorpay_order_id,
+                                    razorpay_signature: response.razorpay_signature
+                                })
+                            });
 
-                                if (!verifyResponse.ok) {
-                                    const errorData = await verifyResponse.json();
-                                    throw new Error(errorData.error || 'Payment verification failed');
-                                }
+                            const verifyResult = await verifyResponse.json();
+                            debugLog('Verification response:', verifyResult);
 
-                                const verifyResult = await verifyResponse.json();
-                                debugLog('Verification result:', verifyResult);
-
-                                if (verifyResult.success) {
-                                    currentPaymentId = verifyResult.paymentId;
-                                    analysesRemaining = verifyResult.uploadsRemaining || 1;
-                                    
-                                    // Check if project description is ready for analysis
-                                    const words = projectDescription.value.trim().split(/\s+/).length;
-                                    
-                                    // Close Razorpay modal first
-                                    if (rzp) {
-                                        rzp.close();
-                                    }
-                                    
-                                    // Hide our processing modal
-                                    modal.style.display = 'none';
-                                    
-                                    if (words >= WORD_REQUIREMENT) {
-                                        // Automatically trigger analysis
-                                        handleAnalyze();
-                                    } else {
-                                        showSuccess('Payment successful! Please enter your project description to start analysis.');
-                                    }
-                                    
-                                    updateAnalysisCount();
-                                    resolve(verifyResult);
-                                    return true;
-                                } else {
-                                    throw new Error(verifyResult.error || 'Payment verification failed');
-                                }
-                            } catch (error) {
-                                debugLog('Verification attempt failed:', error);
-                                if (retryCount < maxRetries) {
-                                    retryCount++;
-                                    debugLog(`Retrying verification (${retryCount}/${maxRetries})...`);
-                                    await new Promise(resolve => setTimeout(resolve, retryDelay));
-                                    return verifyWithRetry();
-                                }
-                                throw error;
+                            if (!verifyResponse.ok) {
+                                throw new Error(verifyResult.error || verifyResult.details || 'Payment verification failed');
                             }
-                        }
 
-                        await verifyWithRetry();
-                    } catch (error) {
-                        debugLog('All verification attempts failed:', error);
-                        showError(`Payment verification failed: ${error.message}. If payment was deducted, please contact support with payment ID: ${response.razorpay_payment_id}`);
-                        reject(error);
+                            if (verifyResult.success) {
+                                currentPaymentId = verifyResult.paymentId;
+                                analysesRemaining = verifyResult.uploadsRemaining || 1;
+                                
+                                // Check if project description is ready for analysis
+                                const words = projectDescription.value.trim().split(/\s+/).length;
+                                
+                                // Close Razorpay modal first
+                                if (rzp) {
+                                    rzp.close();
+                                }
+                                
+                                // Hide our processing modal
+                                modal.style.display = 'none';
+                                
+                                if (words >= WORD_REQUIREMENT) {
+                                    // Automatically trigger analysis
+                                    handleAnalyze();
+                                } else {
+                                    showSuccess('Payment successful! Please enter your project description to start analysis.');
+                                }
+                                
+                                updateAnalysisCount();
+                                return true;
+                            } else {
+                                throw new Error('Payment verification failed');
+                            }
+                        } catch (error) {
+                            debugLog('Verification attempt failed:', error);
+                            if (retryCount < maxRetries) {
+                                retryCount++;
+                                debugLog(`Retrying verification (${retryCount}/${maxRetries})...`);
+                                await new Promise(resolve => setTimeout(resolve, retryDelay));
+                                return verifyWithRetry();
+                            }
+                            throw error;
+                        }
                     }
-                });
+
+                    await verifyWithRetry();
+                } catch (error) {
+                    debugLog('All verification attempts failed:', error);
+                    showError(`Payment verification failed: ${error.message}. If payment was deducted, please contact support with payment ID: ${response.razorpay_payment_id}`);
+                    throw error;
+                }
             },
             modal: {
                 ondismiss: function() {
@@ -613,21 +617,23 @@ async function initiatePayment() {
                 enabled: true,
                 max_count: 3
             },
-            timeout: 900,
-            send_sms_hash: false
+            timeout: 900
         };
 
         // Close our loading modal before opening Razorpay
         modal.style.display = 'none';
 
         // Create and open Razorpay
-        const rzp = new Razorpay(options);
+        rzp = new Razorpay(options);
         rzp.open();
         debugLog('Razorpay modal opened');
 
     } catch (error) {
         debugLog('Payment initialization failed:', error);
         showError('Failed to initialize payment: ' + error.message);
+        if (rzp) {
+            rzp.close();
+        }
     }
 }
 

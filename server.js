@@ -356,14 +356,25 @@ app.post('/api/create-payment', auth, checkRazorpay, async (req, res) => {
 // Verify Razorpay payment
 app.post('/api/verify-payment', auth, async (req, res) => {
   try {
-    console.log('Received payment verification request:', req.body);
+    console.log('Received payment verification request:', {
+      orderId: req.body.razorpay_order_id,
+      paymentId: req.body.razorpay_payment_id,
+      hasSignature: !!req.body.razorpay_signature
+    });
+
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
     // Validate required fields
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      console.log('Missing required fields:', {
+        hasOrderId: !!razorpay_order_id,
+        hasPaymentId: !!razorpay_payment_id,
+        hasSignature: !!razorpay_signature
+      });
       return res.status(400).json({
         error: 'Missing required payment verification fields',
-        success: false
+        success: false,
+        details: 'All payment verification fields must be provided'
       });
     }
 
@@ -377,10 +388,14 @@ app.post('/api/verify-payment', auth, async (req, res) => {
     const isAuthentic = expectedSignature === razorpay_signature;
 
     if (!isAuthentic) {
-      console.log('Invalid payment signature');
+      console.log('Signature verification failed:', {
+        expected: expectedSignature,
+        received: razorpay_signature
+      });
       return res.status(400).json({ 
         error: 'Invalid payment signature',
-        success: false 
+        success: false,
+        details: 'Payment signature verification failed'
       });
     }
 
@@ -392,10 +407,28 @@ app.post('/api/verify-payment', auth, async (req, res) => {
     });
 
     if (!existingPayment) {
-      console.log('Payment record not found');
+      console.log('Payment record not found for order:', razorpay_order_id);
       return res.status(404).json({
         error: 'Payment record not found',
-        success: false
+        success: false,
+        details: 'No payment record found for this order ID'
+      });
+    }
+
+    // Verify payment with Razorpay
+    try {
+      const paymentVerification = await razorpay.payments.fetch(razorpay_payment_id);
+      console.log('Razorpay payment verification:', paymentVerification);
+
+      if (paymentVerification.status !== 'captured') {
+        throw new Error(`Payment not captured. Status: ${paymentVerification.status}`);
+      }
+    } catch (razorpayError) {
+      console.error('Razorpay verification failed:', razorpayError);
+      return res.status(400).json({
+        error: 'Payment verification failed',
+        success: false,
+        details: 'Failed to verify payment with Razorpay'
       });
     }
 
@@ -419,6 +452,12 @@ app.post('/api/verify-payment', auth, async (req, res) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'POST');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    console.log('Payment verification successful:', {
+      paymentId,
+      userId: req.user.id,
+      orderId: razorpay_order_id
+    });
 
     res.json({
       success: true,
