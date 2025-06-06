@@ -375,23 +375,54 @@ app.post('/api/verify-payment', auth, checkRazorpay, async (req, res) => {
     try {
         const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
-        console.log('Verifying payment:', {
+        console.log('Payment verification request received:', {
             orderId: razorpay_order_id,
-            paymentId: razorpay_payment_id
+            paymentId: razorpay_payment_id,
+            userId: req.user.id
         });
 
+        // Validate required fields
         if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+            console.log('Missing required fields:', {
+                hasOrderId: !!razorpay_order_id,
+                hasPaymentId: !!razorpay_payment_id,
+                hasSignature: !!razorpay_signature
+            });
             return res.status(400).json({
-                error: 'Missing payment verification fields',
+                error: 'Missing required payment verification fields',
                 success: false
             });
         }
 
-        // First verify the payment with Razorpay
+        // First check if payment is already verified
+        const existingPayment = await prisma.payment.findFirst({
+            where: {
+                razorpayOrderId: razorpay_order_id,
+                status: 'completed'
+            }
+        });
+
+        if (existingPayment) {
+            console.log('Payment already verified:', existingPayment);
+            return res.json({
+                success: true,
+                message: 'Payment already verified',
+                paymentId: existingPayment.razorpayPaymentId,
+                uploadsRemaining: 1
+            });
+        }
+
+        // Verify payment with Razorpay
         try {
+            console.log('Fetching payment details from Razorpay:', razorpay_payment_id);
             const payment = await razorpay.payments.fetch(razorpay_payment_id);
-            console.log('Payment details:', payment);
             
+            console.log('Razorpay payment details:', {
+                status: payment.status,
+                amount: payment.amount,
+                orderId: payment.order_id
+            });
+
             if (payment.status !== 'captured') {
                 return res.status(400).json({
                     error: 'Payment not captured',
@@ -408,6 +439,10 @@ app.post('/api/verify-payment', auth, checkRazorpay, async (req, res) => {
                 .digest("hex");
 
             if (expectedSignature !== razorpay_signature) {
+                console.log('Signature verification failed:', {
+                    expected: expectedSignature,
+                    received: razorpay_signature
+                });
                 return res.status(400).json({
                     error: 'Invalid payment signature',
                     success: false
@@ -415,7 +450,7 @@ app.post('/api/verify-payment', auth, checkRazorpay, async (req, res) => {
             }
 
             // Update payment record
-            await prisma.payment.updateMany({
+            const updatedPayment = await prisma.payment.updateMany({
                 where: {
                     razorpayOrderId: razorpay_order_id,
                     userId: req.user.id,
@@ -423,15 +458,32 @@ app.post('/api/verify-payment', auth, checkRazorpay, async (req, res) => {
                 },
                 data: {
                     razorpayPaymentId: razorpay_payment_id,
-                    status: 'completed'
+                    status: 'completed',
+                    verifiedAt: new Date()
                 }
             });
 
-            console.log('Payment verification successful');
+            if (updatedPayment.count === 0) {
+                console.log('No payment record updated:', {
+                    orderId: razorpay_order_id,
+                    userId: req.user.id
+                });
+                return res.status(400).json({
+                    error: 'Failed to update payment record',
+                    success: false
+                });
+            }
+
+            console.log('Payment verification successful:', {
+                paymentId: razorpay_payment_id,
+                userId: req.user.id
+            });
 
             res.json({
                 success: true,
-                message: 'Payment verified successfully'
+                message: 'Payment verified successfully',
+                paymentId: razorpay_payment_id,
+                uploadsRemaining: 1
             });
         } catch (razorpayError) {
             console.error('Razorpay API error:', razorpayError);
