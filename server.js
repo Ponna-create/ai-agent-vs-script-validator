@@ -24,22 +24,67 @@ const webhookRoutes = require('./routes/webhook');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Configure CORS with specific options
+app.use(cors({
+    origin: true,
+    credentials: true,
+    exposedHeaders: [
+        'x-rtb-fingerprint-id',
+        'x-razorpay-signature',
+        'x-razorpay-order-id',
+        'x-razorpay-payment-id'
+    ]
+}));
+
 // Initialize Prisma
 const prisma = new PrismaClient();
 
-// Initialize Razorpay
+// Initialize Razorpay with better error handling
 let razorpay;
 try {
+    // Check if environment variables are loaded
     if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-        throw new Error('Razorpay credentials missing');
+        console.error('Razorpay environment variables are missing:');
+        console.error(`RAZORPAY_KEY_ID: ${process.env.RAZORPAY_KEY_ID ? 'Present' : 'Missing'}`);
+        console.error(`RAZORPAY_KEY_SECRET: ${process.env.RAZORPAY_KEY_SECRET ? 'Present' : 'Missing'}`);
+        
+        // In production, we'll throw an error
+        if (process.env.NODE_ENV === 'production') {
+            throw new Error('Razorpay credentials are not configured. Please check environment variables.');
+        }
+        
+        console.warn('Creating mock Razorpay instance for development');
+        // In development, we'll create a mock instance
+        razorpay = {
+            orders: {
+                create: () => Promise.resolve({ 
+                    id: 'test_order_' + Date.now(),
+                    amount: 19900,
+                    currency: 'INR',
+                    status: 'created'
+                })
+            },
+            payments: {
+                fetch: () => Promise.resolve({
+                    status: 'captured',
+                    order_id: 'test_order_' + Date.now(),
+                    amount: 19900
+                })
+            }
+        };
+    } else {
+        // Initialize real Razorpay instance
+        razorpay = new Razorpay({
+            key_id: process.env.RAZORPAY_KEY_ID,
+            key_secret: process.env.RAZORPAY_KEY_SECRET
+        });
+        console.log('Razorpay initialized with:', {
+            keyType: process.env.RAZORPAY_KEY_ID.startsWith('rzp_live') ? 'live' : 'test',
+            environment: process.env.NODE_ENV || 'development'
+        });
     }
-    razorpay = new Razorpay({
-        key_id: process.env.RAZORPAY_KEY_ID,
-        key_secret: process.env.RAZORPAY_KEY_SECRET
-    });
-    console.log('Razorpay initialized successfully');
 } catch (error) {
-    console.error('Razorpay initialization error:', error);
+    console.error('Failed to initialize Razorpay:', error);
     razorpay = null;
 }
 
@@ -49,7 +94,7 @@ const checkRazorpay = (req, res, next) => {
         console.error('Razorpay not initialized');
         return res.status(503).json({
             error: 'Payment service unavailable',
-            details: 'Payment system is not properly configured'
+            details: 'Payment system is not properly configured. Please check server logs.'
         });
     }
     next();
@@ -194,31 +239,6 @@ app.use(helmet({
   crossOriginOpenerPolicy: { policy: "same-origin" }
 }));
 
-// Configure CORS with proper options
-const corsOptions = {
-  origin: [
-    'https://checkout.razorpay.com',
-    'https://api.razorpay.com',
-    'https://*.razorpay.com'
-  ],
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type',
-    'Authorization',
-    'X-Requested-With',
-    'Accept',
-    'Origin',
-    'Access-Control-Allow-Headers',
-    'Access-Control-Allow-Origin',
-    'X-CSRF-Token'
-  ],
-  credentials: true,
-  maxAge: 86400, // 24 hours
-  preflightContinue: false,
-  optionsSuccessStatus: 204
-};
-
-app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -328,30 +348,52 @@ app.post('/api/create-payment', auth, checkRazorpay, async (req, res) => {
         
         // Validate Razorpay initialization
         if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-            console.error('Missing Razorpay credentials');
+            console.error('Missing Razorpay credentials:', {
+                hasKeyId: !!process.env.RAZORPAY_KEY_ID,
+                hasKeySecret: !!process.env.RAZORPAY_KEY_SECRET
+            });
             return res.status(503).json({
                 error: 'Payment service configuration error',
                 details: 'Payment service is not properly configured'
             });
         }
 
+        // Log Razorpay configuration (without exposing full keys)
+        console.log('Razorpay configuration:', {
+            keyId: process.env.RAZORPAY_KEY_ID.substring(0, 8) + '...',
+            keyType: process.env.RAZORPAY_KEY_ID.startsWith('rzp_live') ? 'live' : 'test',
+            hasSecret: !!process.env.RAZORPAY_KEY_SECRET,
+            environment: process.env.NODE_ENV || 'development'
+        });
+
         // Create order with required fields
         const options = {
             amount: 19900,  // amount in paisa
             currency: "INR",
             receipt: `order_rcptid_${Date.now()}`,
-            payment_capture: 1,
             notes: {
-                userId: req.user.id
+                userId: req.user.id,
+                userEmail: req.user.email || 'not_provided',
+                environment: process.env.NODE_ENV || 'development'
             }
         };
 
         console.log('Creating order with options:', {
             ...options,
-            notes: undefined  // Don't log user data
+            notes: { userId: '***', userEmail: '***' }  // Don't log user data
         });
 
         try {
+            // Verify Razorpay instance
+            if (!razorpay || !razorpay.orders || typeof razorpay.orders.create !== 'function') {
+                console.error('Invalid Razorpay instance:', {
+                    hasInstance: !!razorpay,
+                    hasOrders: razorpay && !!razorpay.orders,
+                    hasCreateFunction: razorpay && razorpay.orders && typeof razorpay.orders.create === 'function'
+                });
+                throw new Error('Payment service not properly initialized');
+            }
+
             const order = await razorpay.orders.create(options);
             console.log('Order created successfully:', {
                 id: order.id,
@@ -375,22 +417,50 @@ app.post('/api/create-payment', auth, checkRazorpay, async (req, res) => {
                 }
             });
 
+            // Set additional headers for better tracking
+            res.set('x-razorpay-order-id', order.id);
+            
             // Send only required data to frontend
             res.json({
                 key: process.env.RAZORPAY_KEY_ID,
                 amount: order.amount,
                 currency: order.currency,
-                id: order.id
+                id: order.id,
+                notes: options.notes
             });
         } catch (razorpayError) {
-            console.error('Razorpay API error:', razorpayError);
+            console.error('Razorpay API error:', {
+                message: razorpayError.message,
+                code: razorpayError.code,
+                status: razorpayError.status,
+                stack: razorpayError.stack
+            });
+            
+            // Check for specific error types
+            if (razorpayError.message?.toLowerCase().includes('invalid api key')) {
+                return res.status(503).json({
+                    error: 'Invalid API configuration',
+                    details: 'Please contact support'
+                });
+            }
+            
+            if (razorpayError.message?.toLowerCase().includes('rate limit')) {
+                return res.status(429).json({
+                    error: 'Too many requests',
+                    details: 'Please try again in a few minutes'
+                });
+            }
+
             return res.status(503).json({
                 error: 'Failed to create order with payment provider',
-                details: razorpayError.message
+                details: process.env.NODE_ENV === 'development' ? razorpayError.message : 'Payment service temporarily unavailable'
             });
         }
     } catch (error) {
-        console.error('Payment creation error:', error);
+        console.error('Payment creation error:', {
+            message: error.message,
+            stack: error.stack
+        });
         res.status(500).json({
             error: 'Failed to create payment',
             details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
