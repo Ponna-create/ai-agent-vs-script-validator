@@ -497,6 +497,7 @@ window.initializePayment = async function() {
     try {
         const paymentButton = document.getElementById('payment-button');
         const amount = paymentButton.getAttribute('data-amount');
+        debugLog('Payment amount:', amount);
         
         debugLog('Creating payment order...');
         const response = await fetch('/api/payment/create-order', {
@@ -506,13 +507,15 @@ window.initializePayment = async function() {
                 'Authorization': `Bearer ${authToken}`
             },
             body: JSON.stringify({
-                amount: amount,
+                amount: parseInt(amount),
                 currency: 'INR'
             })
         });
 
         if (!response.ok) {
-            throw new Error('Failed to create payment order');
+            const errorData = await response.json();
+            debugLog('Payment order creation failed:', errorData);
+            throw new Error(errorData.error || 'Failed to create payment order');
         }
 
         const orderData = await response.json();
