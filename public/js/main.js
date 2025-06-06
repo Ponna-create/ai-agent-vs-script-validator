@@ -475,17 +475,29 @@ function updateAnalysisCount() {
 
 // Add Razorpay script loading check
 function isRazorpayLoaded() {
-    return typeof Razorpay !== 'undefined';
+    return typeof window.Razorpay === 'function';
 }
 
-// Initialize payment handling
-async function initializePayment() {
+// Make payment function globally accessible
+window.initializePayment = async function() {
     try {
         debugLog('Initializing payment...');
         
         // Check if Razorpay is loaded
         if (!isRazorpayLoaded()) {
-            throw new Error('Payment system is not loaded yet. Please refresh the page and try again.');
+            debugLog('Razorpay not loaded, waiting...');
+            // Wait for up to 5 seconds for Razorpay to load
+            for (let i = 0; i < 10; i++) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+                if (isRazorpayLoaded()) {
+                    debugLog('Razorpay loaded successfully');
+                    break;
+                }
+            }
+            
+            if (!isRazorpayLoaded()) {
+                throw new Error('Payment system is not loaded. Please refresh the page and try again.');
+            }
         }
         
         // Show loading state
@@ -501,11 +513,13 @@ async function initializePayment() {
         
         // Check authentication
         if (!currentUser || !authToken) {
+            debugLog('User not authenticated, showing login modal');
             showLoginModal();
             return;
         }
         
         // Create order
+        debugLog('Creating payment order...');
         const response = await fetch('/api/create-payment', {
             method: 'POST',
             headers: {
@@ -513,7 +527,11 @@ async function initializePayment() {
                 'Accept': 'application/json',
                 'Authorization': `Bearer ${authToken}`
             },
-            credentials: 'include'
+            credentials: 'include',
+            body: JSON.stringify({
+                amount: 69900, // amount in paisa
+                currency: 'INR'
+            })
         });
 
         if (!response.ok) {
@@ -545,7 +563,8 @@ async function initializePayment() {
             modal: {
                 ondismiss: handlePaymentModalDismiss,
                 confirm_close: true,
-                escape: false
+                escape: false,
+                animation: true
             },
             prefill: {
                 name: currentUser.name || '',
@@ -557,6 +576,9 @@ async function initializePayment() {
             },
             theme: {
                 color: "#3399cc"
+            },
+            retry: {
+                enabled: false
             }
         };
 
@@ -570,16 +592,21 @@ async function initializePayment() {
         });
 
         // Initialize Razorpay
-        const rzp = new Razorpay(options);
+        const rzp = new window.Razorpay(options);
         
         // Store instance for later use
         window.razorpayInstance = rzp;
         
-        // Open payment modal
-        rzp.open();
-        
         // Add event listeners
         rzp.on('payment.failed', handlePaymentFailure);
+        rzp.on('payment.error', function(error) {
+            debugLog('Payment error:', error);
+            handlePaymentFailure(error);
+        });
+        
+        // Open payment modal
+        debugLog('Opening Razorpay modal...');
+        rzp.open();
         
     } catch (error) {
         debugLog('Payment initialization error:', error);
@@ -596,7 +623,7 @@ async function initializePayment() {
         // Show user-friendly error
         showError(error.message || 'Failed to initialize payment. Please try again later.');
     }
-}
+};
 
 // Handle successful payment
 async function handlePaymentSuccess(response) {
@@ -616,7 +643,8 @@ async function handlePaymentSuccess(response) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                'Accept': 'application/json',
+                'Authorization': `Bearer ${authToken}`
             },
             credentials: 'include',
             body: JSON.stringify({
@@ -670,7 +698,7 @@ function handlePaymentModalDismiss() {
 
 // Handle payment failure
 function handlePaymentFailure(response) {
-    debugLog('Payment failed:', response.error);
+    debugLog('Payment failed:', response.error || response);
     const paymentStatus = document.getElementById('payment-status');
     const paymentButton = document.getElementById('payment-button');
     
@@ -683,10 +711,12 @@ function handlePaymentFailure(response) {
     
     // Show user-friendly error message
     let errorMessage = 'Payment failed. ';
-    if (response.error.description) {
+    if (response.error?.description) {
         errorMessage += response.error.description;
-    } else if (response.error.reason) {
+    } else if (response.error?.reason) {
         errorMessage += response.error.reason;
+    } else if (typeof response === 'string') {
+        errorMessage += response;
     } else {
         errorMessage += 'Please try again later.';
     }
