@@ -480,148 +480,72 @@ function isRazorpayLoaded() {
 
 // Make payment function globally accessible
 window.initializePayment = async function() {
+    debugLog('Initializing payment...');
+    
+    if (!currentUser) {
+        debugLog('User not authenticated');
+        showLoginModal();
+        return;
+    }
+
+    if (!isRazorpayLoaded()) {
+        debugLog('Razorpay not loaded');
+        showError('Payment system is still loading. Please try again in a moment.');
+        return;
+    }
+
     try {
-        debugLog('Initializing payment...');
-        
-        // Check if Razorpay is loaded
-        if (!isRazorpayLoaded()) {
-            debugLog('Razorpay not loaded, waiting...');
-            // Wait for up to 5 seconds for Razorpay to load
-            for (let i = 0; i < 10; i++) {
-                await new Promise(resolve => setTimeout(resolve, 500));
-                if (isRazorpayLoaded()) {
-                    debugLog('Razorpay loaded successfully');
-                    break;
-                }
-            }
-            
-            if (!isRazorpayLoaded()) {
-                throw new Error('Payment system is not loaded. Please refresh the page and try again.');
-            }
-        }
-        
-        // Show loading state
         const paymentButton = document.getElementById('payment-button');
-        const paymentStatus = document.getElementById('payment-status');
+        const amount = paymentButton.getAttribute('data-amount');
         
-        if (!paymentButton || !paymentStatus) {
-            throw new Error('Payment elements not found in DOM');
-        }
-        
-        paymentButton.disabled = true;
-        paymentStatus.textContent = 'Initializing payment...';
-        
-        // Check authentication
-        if (!currentUser || !authToken) {
-            debugLog('User not authenticated, showing login modal');
-            showLoginModal();
-            return;
-        }
-        
-        // Create order
         debugLog('Creating payment order...');
-        const response = await fetch('/api/create-payment', {
+        const response = await fetch('/api/payment/create-order', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json',
                 'Authorization': `Bearer ${authToken}`
             },
-            credentials: 'include',
             body: JSON.stringify({
-                amount: 69900, // amount in paisa
+                amount: amount,
                 currency: 'INR'
             })
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.details || 'Failed to create payment order');
+            throw new Error('Failed to create payment order');
         }
 
-        const data = await response.json();
-        debugLog('Payment order created:', { orderId: data.id });
+        const orderData = await response.json();
+        debugLog('Order created:', orderData);
 
-        // Store order details
-        window.paymentOrderId = data.id;
-        
-        // Get headers for tracking
-        const orderId = response.headers.get('x-razorpay-order-id');
-        if (orderId) {
-            debugLog('Order tracking ID:', orderId);
-        }
-
-        // Configure Razorpay options
         const options = {
-            key: data.key,
-            amount: data.amount,
-            currency: data.currency,
-            name: "Brain Training",
-            description: "Premium Access",
-            order_id: data.id,
+            key: orderData.key_id,
+            amount: orderData.amount,
+            currency: orderData.currency,
+            name: 'AI Agent vs Script Validator',
+            description: 'Premium Access',
+            order_id: orderData.id,
             handler: handlePaymentSuccess,
-            modal: {
-                ondismiss: handlePaymentModalDismiss,
-                confirm_close: true,
-                escape: false,
-                animation: true
-            },
             prefill: {
-                name: currentUser.name || '',
-                email: currentUser.email || '',
+                name: currentUser.name,
+                email: currentUser.email
             },
             notes: {
-                userId: currentUser.id,
-                userEmail: currentUser.email
+                user_id: currentUser.id
             },
             theme: {
-                color: "#3399cc"
-            },
-            retry: {
-                enabled: false
+                color: '#3b82f6'
             }
         };
 
-        debugLog('Initializing Razorpay with options:', {
-            ...options,
-            key: '[REDACTED]',
-            prefill: {
-                name: '[REDACTED]',
-                email: '[REDACTED]'
-            }
-        });
-
-        // Initialize Razorpay
-        const rzp = new window.Razorpay(options);
-        
-        // Store instance for later use
-        window.razorpayInstance = rzp;
-        
-        // Add event listeners
-        rzp.on('payment.failed', handlePaymentFailure);
-        rzp.on('payment.error', function(error) {
-            debugLog('Payment error:', error);
-            handlePaymentFailure(error);
-        });
-        
-        // Open payment modal
+        const rzp = new Razorpay(options);
         debugLog('Opening Razorpay modal...');
         rzp.open();
         
+        rzp.on('payment.failed', handlePaymentFailure);
     } catch (error) {
-        debugLog('Payment initialization error:', error);
-        const paymentStatus = document.getElementById('payment-status');
-        const paymentButton = document.getElementById('payment-button');
-        
-        if (paymentStatus) {
-            paymentStatus.textContent = 'Payment initialization failed. Please try again.';
-        }
-        if (paymentButton) {
-            paymentButton.disabled = false;
-        }
-        
-        // Show user-friendly error
-        showError(error.message || 'Failed to initialize payment. Please try again later.');
+        debugLog('Payment initialization failed:', error);
+        showError('Failed to initialize payment. Please try again later.');
     }
 };
 

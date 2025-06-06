@@ -192,8 +192,8 @@
         
         <button id="payment-button" 
                 class="payment-button" 
-                onclick="window.initializePayment()"
-                data-amount="699"
+                onclick="initializePayment()"
+                data-amount="69900"
                 data-currency="INR"
                 aria-label="Pay ₹699.00">
             Pay ₹699.00
@@ -205,7 +205,7 @@
         window.addEventListener('load', function() {
             const paymentBtn = document.getElementById('payment-button');
             if (paymentBtn) {
-                if (typeof window.initializePayment !== 'function') {
+                if (typeof initializePayment !== 'function') {
                     paymentBtn.disabled = true;
                     const paymentStatus = document.getElementById('payment-status');
                     if (paymentStatus) {
