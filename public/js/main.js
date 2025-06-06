@@ -456,7 +456,6 @@ async function initiatePayment() {
     let rzp = null;
     
     try {
-        // Show loading state
         showModal(`
             <div class="loading-container">
                 <h3>Initializing Payment...</h3>
@@ -479,13 +478,15 @@ async function initiatePayment() {
             ok: orderResponse.ok
         });
 
-        if (!orderResponse.ok) {
-            const errorData = await orderResponse.json();
-            throw new Error(errorData.error || errorData.details || 'Failed to create payment');
-        }
-
         const orderData = await orderResponse.json();
-        debugLog('Order created:', orderData);
+        debugLog('Order created:', {
+            ...orderData,
+            key: orderData.key ? '***' : undefined
+        });
+
+        if (!orderResponse.ok) {
+            throw new Error(orderData.error || orderData.details || 'Failed to create payment');
+        }
 
         if (!orderData.key || !orderData.amount || !orderData.currency || !orderData.id) {
             throw new Error('Invalid order data received from server');
@@ -520,7 +521,7 @@ async function initiatePayment() {
 
                 let retryCount = 0;
                 const maxRetries = 3;
-                const retryDelay = 2000; // 2 seconds
+                const retryDelay = 2000;
 
                 while (retryCount < maxRetries) {
                     try {
@@ -543,15 +544,12 @@ async function initiatePayment() {
                         debugLog('Verification result:', verifyResult);
 
                         if (verifyResult.success) {
-                            // Store payment details
                             currentPaymentId = response.razorpay_payment_id;
                             analysesRemaining = verifyResult.uploadsRemaining || 1;
                             
-                            // Close modals
                             if (rzp) rzp.close();
                             hideModal();
                             
-                            // Check project description and proceed
                             const words = projectDescription.value.trim().split(/\s+/).length;
                             if (words >= WORD_REQUIREMENT) {
                                 handleAnalyze();
@@ -563,9 +561,7 @@ async function initiatePayment() {
                             return;
                         }
 
-                        // If we get here, verification wasn't successful but didn't throw
                         throw new Error(verifyResult.error || 'Payment verification failed');
-                        
                     } catch (error) {
                         debugLog(`Verification attempt ${retryCount + 1} failed:`, error);
                         
@@ -575,9 +571,8 @@ async function initiatePayment() {
                             continue;
                         }
                         
-                        // If we've exhausted all retries
                         hideModal();
-                        showError(`Payment verification failed after ${maxRetries} attempts. If amount was deducted, please contact support with payment ID: ${response.razorpay_payment_id}`);
+                        showError(`Payment verification failed. If amount was deducted, please contact support with payment ID: ${response.razorpay_payment_id}`);
                         throw error;
                     }
                 }
@@ -596,8 +591,23 @@ async function initiatePayment() {
             },
             theme: {
                 color: "#2563eb"
+            },
+            retry: {
+                enabled: false,  // Disable automatic retries
+                max_count: 0
+            },
+            timeout: 300,  // 5 minutes timeout
+            config: {
+                display: {
+                    hide: [
+                        { method: 'paylater' }
+                    ]
+                }
             }
         };
+
+        // Close our loading modal before opening Razorpay
+        hideModal();
 
         // Create new instance and open checkout
         rzp = new Razorpay(options);

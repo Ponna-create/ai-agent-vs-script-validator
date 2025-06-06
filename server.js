@@ -326,46 +326,74 @@ app.post('/api/create-payment', auth, checkRazorpay, async (req, res) => {
     try {
         console.log('Creating Razorpay order...');
         
-        // Create order with minimum required fields
+        // Validate Razorpay initialization
+        if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+            console.error('Missing Razorpay credentials');
+            return res.status(503).json({
+                error: 'Payment service configuration error',
+                details: 'Payment service is not properly configured'
+            });
+        }
+
+        // Create order with required fields
         const options = {
             amount: 19900,  // amount in paisa
             currency: "INR",
             receipt: `order_rcptid_${Date.now()}`,
-            payment_capture: 1
+            payment_capture: 1,
+            notes: {
+                userId: req.user.id
+            }
         };
 
-        console.log('Creating order with options:', options);
+        console.log('Creating order with options:', {
+            ...options,
+            notes: undefined  // Don't log user data
+        });
 
-        const order = await razorpay.orders.create(options);
-        
-        console.log('Order created successfully:', order);
+        try {
+            const order = await razorpay.orders.create(options);
+            console.log('Order created successfully:', {
+                id: order.id,
+                amount: order.amount,
+                currency: order.currency,
+                status: order.status
+            });
 
-        if (!order.id) {
-            throw new Error('Order creation failed - no order ID received');
-        }
-
-        // Store order in database
-        await prisma.payment.create({
-            data: {
-                userId: req.user.id,
-                razorpayOrderId: order.id,
-                amount: options.amount,
-                status: 'pending'
+            if (!order.id) {
+                throw new Error('Order creation failed - no order ID received');
             }
-        });
 
-        // Send only required data to frontend
-        res.json({
-            key: process.env.RAZORPAY_KEY_ID,
-            amount: order.amount,
-            order_id: order.id,  // This is what Razorpay expects in frontend
-            currency: "INR"
-        });
+            // Store order in database
+            await prisma.payment.create({
+                data: {
+                    userId: req.user.id,
+                    razorpayOrderId: order.id,
+                    amount: options.amount,
+                    status: 'pending',
+                    createdAt: new Date()
+                }
+            });
+
+            // Send only required data to frontend
+            res.json({
+                key: process.env.RAZORPAY_KEY_ID,
+                amount: order.amount,
+                currency: order.currency,
+                id: order.id
+            });
+        } catch (razorpayError) {
+            console.error('Razorpay API error:', razorpayError);
+            return res.status(503).json({
+                error: 'Failed to create order with payment provider',
+                details: razorpayError.message
+            });
+        }
     } catch (error) {
         console.error('Payment creation error:', error);
         res.status(500).json({
             error: 'Failed to create payment',
-            details: error.message
+            details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
         });
     }
 });
