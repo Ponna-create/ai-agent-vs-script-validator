@@ -88,6 +88,12 @@ router.post('/create-order', auth, async (req, res) => {
 
     } catch (error) {
         console.error('Order creation error:', error);
+        if (error && error.error) {
+            console.error('Razorpay error details:', error.error);
+        }
+        if (error && error.response) {
+            console.error('Razorpay error response:', error.response);
+        }
         
         // Check for specific error types
         if (error.code === 'P2002') {
