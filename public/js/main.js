@@ -566,7 +566,7 @@ async function handlePaymentSuccess(response) {
         }
         
         // Verify payment with backend
-        const verificationResponse = await fetch('/api/verify-payment', {
+        const verificationResponse = await fetch('/api/payment/verify-payment', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
