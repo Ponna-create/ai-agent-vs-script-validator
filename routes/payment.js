@@ -54,10 +54,12 @@ router.post('/create-order', auth, async (req, res) => {
 
         // Create order in Razorpay
         console.log('Creating Razorpay order...');
+        // Ensure receipt is no more than 40 characters
+        const receipt = `order_${Date.now()}_${String(req.user.id).slice(-10)}`.slice(0, 40);
         const order = await razorpay.orders.create({
             amount: numericAmount,
             currency,
-            receipt: `order_${Date.now()}_${req.user.id}`,
+            receipt,
             notes: {
                 userId: req.user.id
             }
