@@ -7,43 +7,76 @@ const Razorpay = require('razorpay');
 const prisma = new PrismaClient();
 
 // Initialize Razorpay
-const razorpay = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET
-});
+let razorpay;
+try {
+    razorpay = new Razorpay({
+        key_id: process.env.RAZORPAY_KEY_ID,
+        key_secret: process.env.RAZORPAY_KEY_SECRET
+    });
+    console.log('Razorpay initialized with key type:', process.env.RAZORPAY_KEY_ID.startsWith('rzp_live') ? 'live' : 'test');
+} catch (error) {
+    console.error('Failed to initialize Razorpay:', error);
+}
 
 // Create a new payment order
 router.post('/create-order', auth, async (req, res) => {
     try {
+        // Check if Razorpay is initialized
+        if (!razorpay) {
+            console.error('Razorpay not initialized');
+            return res.status(500).json({
+                error: 'Payment service unavailable',
+                details: 'Payment system is not properly configured',
+                success: false
+            });
+        }
+
         const { amount, currency = 'INR' } = req.body;
+        console.log('Creating order with:', { amount, currency, userId: req.user.id });
 
         if (!amount) {
+            console.error('Amount missing in request');
             return res.status(400).json({
                 error: 'Amount is required',
                 success: false
             });
         }
 
+        // Validate amount
+        const numericAmount = parseInt(amount);
+        if (isNaN(numericAmount) || numericAmount <= 0) {
+            console.error('Invalid amount:', amount);
+            return res.status(400).json({
+                error: 'Invalid amount',
+                success: false
+            });
+        }
+
         // Create order in Razorpay
+        console.log('Creating Razorpay order...');
         const order = await razorpay.orders.create({
-            amount: parseInt(amount),
+            amount: numericAmount,
             currency,
             receipt: `order_${Date.now()}_${req.user.id}`,
             notes: {
                 userId: req.user.id
             }
         });
+        console.log('Razorpay order created:', order.id);
 
         // Create payment record in database
-        await prisma.payment.create({
+        console.log('Creating payment record...');
+        const payment = await prisma.payment.create({
             data: {
                 userId: req.user.id,
-                amount: parseInt(amount),
+                amount: numericAmount,
                 currency,
                 razorpayOrderId: order.id,
-                status: 'pending'
+                status: 'pending',
+                uploadsRemaining: 1
             }
         });
+        console.log('Payment record created:', payment.id);
 
         res.json({
             success: true,
@@ -55,6 +88,24 @@ router.post('/create-order', auth, async (req, res) => {
 
     } catch (error) {
         console.error('Order creation error:', error);
+        
+        // Check for specific error types
+        if (error.code === 'P2002') {
+            return res.status(400).json({
+                error: 'Duplicate order',
+                details: 'This order has already been created',
+                success: false
+            });
+        }
+        
+        if (error.statusCode === 400) {
+            return res.status(400).json({
+                error: 'Invalid request to payment provider',
+                details: error.message,
+                success: false
+            });
+        }
+
         res.status(500).json({
             error: 'Failed to create payment order',
             details: error.message,
