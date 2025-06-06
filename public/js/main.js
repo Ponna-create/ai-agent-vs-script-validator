@@ -555,16 +555,12 @@ window.initializePayment = async function() {
 // Handle successful payment
 async function handlePaymentSuccess(response) {
     try {
-        debugLog('Payment successful:', { 
-            orderId: response.razorpay_order_id,
-            paymentId: response.razorpay_payment_id
-        });
-        
+        debugLog('Payment success handler fired. Razorpay response:', response);
         const paymentStatus = document.getElementById('payment-status');
         if (paymentStatus) {
             paymentStatus.textContent = 'Verifying payment...';
         }
-        
+        debugLog('About to call /api/payment/verify-payment...');
         // Verify payment with backend
         const verificationResponse = await fetch('/api/payment/verify-payment', {
             method: 'POST',
@@ -580,25 +576,22 @@ async function handlePaymentSuccess(response) {
                 razorpay_signature: response.razorpay_signature
             })
         });
-
+        debugLog('Verification request sent. Awaiting response...');
         if (!verificationResponse.ok) {
             const errorData = await verificationResponse.json();
+            debugLog('Verification failed:', errorData);
             throw new Error(errorData.details || 'Payment verification failed');
         }
-
         const verificationData = await verificationResponse.json();
         debugLog('Payment verification response:', verificationData);
-        
         if (verificationData.success) {
             if (paymentStatus) {
                 paymentStatus.textContent = 'Payment successful!';
             }
-            // Redirect or update UI based on successful payment
             window.location.href = '/dashboard';
         } else {
             throw new Error('Payment verification failed');
         }
-        
     } catch (error) {
         debugLog('Payment verification error:', error);
         const paymentStatus = document.getElementById('payment-status');

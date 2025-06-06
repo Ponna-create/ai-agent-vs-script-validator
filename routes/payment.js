@@ -392,4 +392,9 @@ router.post('/verify-payment', auth, async (req, res) => {
     }
 });
 
+router.post('/webhook', express.json({ type: '*/*' }), (req, res) => {
+    console.log('--- [RAZORPAY WEBHOOK] Event received:', req.body);
+    res.status(200).json({ received: true });
+});
+
 module.exports = router; 
