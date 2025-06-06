@@ -448,7 +448,7 @@ function showPaymentModal() {
         <div class="payment-form">
             <h2>Purchase Analysis Credits</h2>
             <p>Get 1 project analysis for ₹${ANALYSIS_PRICE}</p>
-            <button onclick="initiatePayment()" class="primary-btn">Pay ₹${ANALYSIS_PRICE}</button>
+            <button onclick="window.initializePayment()" class="primary-btn">Pay ₹${ANALYSIS_PRICE}</button>
         </div>
     `;
     modal.style.display = 'block';
