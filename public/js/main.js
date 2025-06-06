@@ -141,6 +141,7 @@ function updateUIForLoggedInUser() {
         `;
     }
     
+    const userStatus = document.getElementById('user-status');
     if (userStatus) {
         userStatus.className = 'user-status logged-in';
         userStatus.innerHTML = `
@@ -163,11 +164,14 @@ function updateUIForLoggedOutUser() {
         `;
     }
     
-    userStatus.className = 'user-status logged-out';
-    userStatus.innerHTML = `
-        <p>⚠️ Please log in or register to analyze your project</p>
-        <small>Create an account to get started</small>
-    `;
+    const userStatus = document.getElementById('user-status');
+    if (userStatus) {
+        userStatus.className = 'user-status logged-out';
+        userStatus.innerHTML = `
+            <p>⚠️ Please log in or register to analyze your project</p>
+            <small>Create an account to get started</small>
+        `;
+    }
     
     updateWordCount();
 }
@@ -469,10 +473,20 @@ function updateAnalysisCount() {
     }
 }
 
+// Add Razorpay script loading check
+function isRazorpayLoaded() {
+    return typeof Razorpay !== 'undefined';
+}
+
 // Initialize payment handling
 async function initializePayment() {
     try {
         debugLog('Initializing payment...');
+        
+        // Check if Razorpay is loaded
+        if (!isRazorpayLoaded()) {
+            throw new Error('Payment system is not loaded yet. Please refresh the page and try again.');
+        }
         
         // Show loading state
         const paymentButton = document.getElementById('payment-button');
@@ -485,12 +499,19 @@ async function initializePayment() {
         paymentButton.disabled = true;
         paymentStatus.textContent = 'Initializing payment...';
         
+        // Check authentication
+        if (!currentUser || !authToken) {
+            showLoginModal();
+            return;
+        }
+        
         // Create order
         const response = await fetch('/api/create-payment', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                'Accept': 'application/json',
+                'Authorization': `Bearer ${authToken}`
             },
             credentials: 'include'
         });
@@ -527,10 +548,13 @@ async function initializePayment() {
                 escape: false
             },
             prefill: {
-                name: data.notes?.userName || '',
-                email: data.notes?.userEmail || '',
+                name: currentUser.name || '',
+                email: currentUser.email || '',
             },
-            notes: data.notes,
+            notes: {
+                userId: currentUser.id,
+                userEmail: currentUser.email
+            },
             theme: {
                 color: "#3399cc"
             }
