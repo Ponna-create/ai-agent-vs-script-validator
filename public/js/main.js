@@ -496,8 +496,8 @@ window.initializePayment = async function() {
 
     try {
         const paymentButton = document.getElementById('payment-button');
-        const amount = paymentButton.getAttribute('data-amount');
-        debugLog('Payment amount:', amount);
+        const amountInPaise = parseInt(paymentButton.getAttribute('data-amount'));
+        debugLog('Payment amount in paise:', amountInPaise);
         
         debugLog('Creating payment order...');
         const response = await fetch('/api/payment/create-order', {
@@ -507,7 +507,7 @@ window.initializePayment = async function() {
                 'Authorization': `Bearer ${authToken}`
             },
             body: JSON.stringify({
-                amount: parseInt(amount),
+                amount: amountInPaise,
                 currency: 'INR'
             })
         });
