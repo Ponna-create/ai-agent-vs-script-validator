@@ -12,6 +12,57 @@ const razorpay = new Razorpay({
     key_secret: process.env.RAZORPAY_KEY_SECRET
 });
 
+// Create a new payment order
+router.post('/create-order', auth, async (req, res) => {
+    try {
+        const { amount, currency = 'INR' } = req.body;
+
+        if (!amount) {
+            return res.status(400).json({
+                error: 'Amount is required',
+                success: false
+            });
+        }
+
+        // Create order in Razorpay
+        const order = await razorpay.orders.create({
+            amount: parseInt(amount),
+            currency,
+            receipt: `order_${Date.now()}_${req.user.id}`,
+            notes: {
+                userId: req.user.id
+            }
+        });
+
+        // Create payment record in database
+        await prisma.payment.create({
+            data: {
+                userId: req.user.id,
+                amount: parseInt(amount),
+                currency,
+                razorpayOrderId: order.id,
+                status: 'pending'
+            }
+        });
+
+        res.json({
+            success: true,
+            key_id: process.env.RAZORPAY_KEY_ID,
+            amount: order.amount,
+            currency: order.currency,
+            id: order.id
+        });
+
+    } catch (error) {
+        console.error('Order creation error:', error);
+        res.status(500).json({
+            error: 'Failed to create payment order',
+            details: error.message,
+            success: false
+        });
+    }
+});
+
 // Request a refund
 router.post('/refund', auth, async (req, res) => {
     try {
