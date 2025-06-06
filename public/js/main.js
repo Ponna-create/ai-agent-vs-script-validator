@@ -22,8 +22,26 @@ let analysesRemaining = 0;
 let authToken = localStorage.getItem('authToken');
 let currentUser = null;
 
-// Add debugging flag
+// Add debugging flag and function
 const DEBUG_MODE = true;
+
+function debugLog(message, data = null) {
+    if (DEBUG_MODE) {
+        if (data === null) {
+            console.log(`[DEBUG] ${message}`);
+        } else {
+            // Clean the data object before logging
+            const cleanData = typeof data === 'object' ? 
+                JSON.parse(JSON.stringify(data, (key, value) => {
+                    if (key === 'password' || key.includes('key') || key.includes('token')) {
+                        return '[REDACTED]';
+                    }
+                    return value;
+                })) : data;
+            console.log(`[DEBUG] ${message}`, cleanData);
+        }
+    }
+}
 
 function debugLog(message, data = '') {
     if (DEBUG_MODE) {
@@ -454,11 +472,18 @@ function updateAnalysisCount() {
 // Initialize payment handling
 async function initializePayment() {
     try {
-        console.log('Initializing payment...');
+        debugLog('Initializing payment...');
         
         // Show loading state
-        document.getElementById('payment-button').disabled = true;
-        document.getElementById('payment-status').textContent = 'Initializing payment...';
+        const paymentButton = document.getElementById('payment-button');
+        const paymentStatus = document.getElementById('payment-status');
+        
+        if (!paymentButton || !paymentStatus) {
+            throw new Error('Payment elements not found in DOM');
+        }
+        
+        paymentButton.disabled = true;
+        paymentStatus.textContent = 'Initializing payment...';
         
         // Create order
         const response = await fetch('/api/create-payment', {
@@ -476,7 +501,7 @@ async function initializePayment() {
         }
 
         const data = await response.json();
-        console.log('Payment order created:', { orderId: data.id });
+        debugLog('Payment order created:', { orderId: data.id });
 
         // Store order details
         window.paymentOrderId = data.id;
@@ -484,7 +509,7 @@ async function initializePayment() {
         // Get headers for tracking
         const orderId = response.headers.get('x-razorpay-order-id');
         if (orderId) {
-            console.log('Order tracking ID:', orderId);
+            debugLog('Order tracking ID:', orderId);
         }
 
         // Configure Razorpay options
@@ -511,6 +536,15 @@ async function initializePayment() {
             }
         };
 
+        debugLog('Initializing Razorpay with options:', {
+            ...options,
+            key: '[REDACTED]',
+            prefill: {
+                name: '[REDACTED]',
+                email: '[REDACTED]'
+            }
+        });
+
         // Initialize Razorpay
         const rzp = new Razorpay(options);
         
@@ -524,9 +558,16 @@ async function initializePayment() {
         rzp.on('payment.failed', handlePaymentFailure);
         
     } catch (error) {
-        console.error('Payment initialization error:', error);
-        document.getElementById('payment-status').textContent = 'Payment initialization failed. Please try again.';
-        document.getElementById('payment-button').disabled = false;
+        debugLog('Payment initialization error:', error);
+        const paymentStatus = document.getElementById('payment-status');
+        const paymentButton = document.getElementById('payment-button');
+        
+        if (paymentStatus) {
+            paymentStatus.textContent = 'Payment initialization failed. Please try again.';
+        }
+        if (paymentButton) {
+            paymentButton.disabled = false;
+        }
         
         // Show user-friendly error
         showError(error.message || 'Failed to initialize payment. Please try again later.');
@@ -536,12 +577,15 @@ async function initializePayment() {
 // Handle successful payment
 async function handlePaymentSuccess(response) {
     try {
-        console.log('Payment successful:', { 
+        debugLog('Payment successful:', { 
             orderId: response.razorpay_order_id,
             paymentId: response.razorpay_payment_id
         });
         
-        document.getElementById('payment-status').textContent = 'Verifying payment...';
+        const paymentStatus = document.getElementById('payment-status');
+        if (paymentStatus) {
+            paymentStatus.textContent = 'Verifying payment...';
+        }
         
         // Verify payment with backend
         const verificationResponse = await fetch('/api/verify-payment', {
@@ -564,9 +608,12 @@ async function handlePaymentSuccess(response) {
         }
 
         const verificationData = await verificationResponse.json();
+        debugLog('Payment verification response:', verificationData);
         
         if (verificationData.success) {
-            document.getElementById('payment-status').textContent = 'Payment successful!';
+            if (paymentStatus) {
+                paymentStatus.textContent = 'Payment successful!';
+            }
             // Redirect or update UI based on successful payment
             window.location.href = '/dashboard';
         } else {
@@ -574,24 +621,41 @@ async function handlePaymentSuccess(response) {
         }
         
     } catch (error) {
-        console.error('Payment verification error:', error);
-        document.getElementById('payment-status').textContent = 'Payment verification failed. Please contact support.';
+        debugLog('Payment verification error:', error);
+        const paymentStatus = document.getElementById('payment-status');
+        if (paymentStatus) {
+            paymentStatus.textContent = 'Payment verification failed. Please contact support.';
+        }
         showError('Payment verification failed. If amount was deducted, please contact support.');
     }
 }
 
 // Handle payment modal dismissal
 function handlePaymentModalDismiss() {
-    console.log('Payment modal dismissed');
-    document.getElementById('payment-status').textContent = 'Payment cancelled';
-    document.getElementById('payment-button').disabled = false;
+    debugLog('Payment modal dismissed');
+    const paymentStatus = document.getElementById('payment-status');
+    const paymentButton = document.getElementById('payment-button');
+    
+    if (paymentStatus) {
+        paymentStatus.textContent = 'Payment cancelled';
+    }
+    if (paymentButton) {
+        paymentButton.disabled = false;
+    }
 }
 
 // Handle payment failure
 function handlePaymentFailure(response) {
-    console.error('Payment failed:', response.error);
-    document.getElementById('payment-status').textContent = 'Payment failed';
-    document.getElementById('payment-button').disabled = false;
+    debugLog('Payment failed:', response.error);
+    const paymentStatus = document.getElementById('payment-status');
+    const paymentButton = document.getElementById('payment-button');
+    
+    if (paymentStatus) {
+        paymentStatus.textContent = 'Payment failed';
+    }
+    if (paymentButton) {
+        paymentButton.disabled = false;
+    }
     
     // Show user-friendly error message
     let errorMessage = 'Payment failed. ';
@@ -623,21 +687,17 @@ function hideModal() {
 }
 
 function showError(message) {
-    const errorHTML = `
-        <div class="error-container">
-            <h3>Error</h3>
-            <p>${message}</p>
-            ${!currentPaymentId ? `
-                <button class="primary-btn" onclick="hideModal(); scrollToAnalyzer();">
-                    Start New Analysis
-                </button>
-            ` : ''}
-            <button class="secondary-btn" onclick="hideModal();">
-                Close
-            </button>
-        </div>
-    `;
-    showModal(errorHTML);
+    debugLog('Showing error:', message);
+    const errorDiv = document.getElementById('error-message');
+    if (errorDiv) {
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+        setTimeout(() => {
+            errorDiv.style.display = 'none';
+        }, 5000);
+    } else {
+        alert(message);
+    }
 }
 
 function displayResults(analysis) {
