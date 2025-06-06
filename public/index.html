@@ -190,30 +190,30 @@
         <div id="payment-status" role="status" aria-live="polite"></div>
         <div id="error-message" role="alert"></div>
         
-        <button id="payment-button" 
-                class="payment-button" 
-                onclick="initializePayment()"
-                data-amount="69900"
-                data-currency="INR"
-                aria-label="Pay ₹699.00">
-            Pay ₹699.00
-        </button>
+            <button id="payment-button" 
+            class="payment-button" 
+            onclick="window.initializePayment()"
+            data-amount="69900"
+            data-currency="INR"
+            aria-label="Pay ₹699.00">
+        Pay ₹699.00
+    </button>
     </div>
 
     <script>
         // Check if payment function exists
-        window.addEventListener('load', function() {
-            const paymentBtn = document.getElementById('payment-button');
-            if (paymentBtn) {
-                if (typeof initializePayment !== 'function') {
-                    paymentBtn.disabled = true;
-                    const paymentStatus = document.getElementById('payment-status');
-                    if (paymentStatus) {
-                        paymentStatus.textContent = 'Payment system is loading...';
-                    }
+            window.addEventListener('load', function() {
+        const paymentBtn = document.getElementById('payment-button');
+        if (paymentBtn) {
+            if (typeof window.initializePayment !== 'function') {
+                paymentBtn.disabled = true;
+                const paymentStatus = document.getElementById('payment-status');
+                if (paymentStatus) {
+                    paymentStatus.textContent = 'Payment system is loading...';
                 }
             }
-        });
+        }
+    });
     </script>
 </body>
 </html> 
