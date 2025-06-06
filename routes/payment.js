@@ -72,7 +72,6 @@ router.post('/create-order', auth, async (req, res) => {
             data: {
                 userId: req.user.id,
                 amount: numericAmount,
-                currency,
                 razorpayOrderId: order.id,
                 status: 'pending',
                 uploadsRemaining: 1
