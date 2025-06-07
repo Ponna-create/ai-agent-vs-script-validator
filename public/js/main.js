@@ -522,7 +522,7 @@ window.initializePayment = async function() {
         debugLog('Order created:', orderData);
 
         const options = {
-            key: orderData.key_id,
+            key: orderData.key || orderData.key_id,
             amount: orderData.amount,
             currency: orderData.currency,
             name: 'AI Agent vs Script Validator',
@@ -540,7 +540,7 @@ window.initializePayment = async function() {
                 color: '#3b82f6'
             }
         };
-
+        debugLog('Razorpay options:', options);
         const rzp = new Razorpay(options);
         debugLog('Opening Razorpay modal...');
         rzp.open();
