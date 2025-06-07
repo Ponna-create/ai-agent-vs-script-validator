@@ -397,4 +397,24 @@ router.post('/webhook', express.json({ type: '*/*' }), (req, res) => {
     res.status(200).json({ received: true });
 });
 
+// Get payment status by Razorpay order ID
+router.get('/status/:orderId', auth, async (req, res) => {
+    try {
+        const { orderId } = req.params;
+        const payment = await prisma.payment.findFirst({
+            where: {
+                razorpayOrderId: orderId,
+                userId: req.user.id
+            }
+        });
+        if (!payment) {
+            return res.status(404).json({ error: 'Payment not found' });
+        }
+        res.json({ status: payment.status, uploadsRemaining: payment.uploadsRemaining });
+    } catch (error) {
+        console.error('Error fetching payment status:', error);
+        res.status(500).json({ error: 'Failed to fetch payment status' });
+    }
+});
+
 module.exports = router; 
