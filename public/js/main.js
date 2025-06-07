@@ -528,7 +528,49 @@ window.initializePayment = async function() {
             name: 'AI Agent vs Script Validator',
             description: 'Premium Access',
             order_id: orderData.id,
-            handler: handlePaymentSuccess,
+            handler: async function(response) {
+                debugLog('Razorpay payment success callback fired:', response);
+                try {
+                    const paymentStatus = document.getElementById('payment-status');
+                    if (paymentStatus) {
+                        paymentStatus.textContent = 'Verifying payment...';
+                    }
+                    debugLog('About to call /api/payment/verify-payment...');
+                    const verificationResponse = await fetch('/api/payment/verify-payment', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'Authorization': `Bearer ${authToken}`
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_signature: response.razorpay_signature
+                        })
+                    });
+                    debugLog('Verification request sent. Awaiting response...');
+                    if (!verificationResponse.ok) {
+                        const errorData = await verificationResponse.json();
+                        debugLog('Verification failed:', errorData);
+                        throw new Error(errorData.details || 'Payment verification failed');
+                    }
+                    const verificationData = await verificationResponse.json();
+                    debugLog('Payment verification response:', verificationData);
+                    if (verificationData.success) {
+                        if (paymentStatus) {
+                            paymentStatus.textContent = 'Payment successful!';
+                        }
+                        window.location.href = '/dashboard';
+                    } else {
+                        throw new Error('Payment verification failed');
+                    }
+                } catch (error) {
+                    debugLog('Error in payment success handler:', error);
+                    showError('Payment verification failed. Please contact support.');
+                }
+            },
             prefill: {
                 name: currentUser.name,
                 email: currentUser.email
@@ -542,65 +584,17 @@ window.initializePayment = async function() {
         };
         debugLog('Razorpay options:', options);
         const rzp = new Razorpay(options);
+        rzp.on('payment.failed', function(response) {
+            debugLog('Razorpay payment failed event:', response);
+            showError('Payment failed. Please try again or contact support.');
+        });
         debugLog('Opening Razorpay modal...');
         rzp.open();
-        
-        rzp.on('payment.failed', handlePaymentFailure);
     } catch (error) {
         debugLog('Payment initialization failed:', error);
         showError('Failed to initialize payment. Please try again later.');
     }
 };
-
-// Handle successful payment
-async function handlePaymentSuccess(response) {
-    try {
-        debugLog('Payment success handler fired. Razorpay response:', response);
-        const paymentStatus = document.getElementById('payment-status');
-        if (paymentStatus) {
-            paymentStatus.textContent = 'Verifying payment...';
-        }
-        debugLog('About to call /api/payment/verify-payment...');
-        // Verify payment with backend
-        const verificationResponse = await fetch('/api/payment/verify-payment', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'Authorization': `Bearer ${authToken}`
-            },
-            credentials: 'include',
-            body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature
-            })
-        });
-        debugLog('Verification request sent. Awaiting response...');
-        if (!verificationResponse.ok) {
-            const errorData = await verificationResponse.json();
-            debugLog('Verification failed:', errorData);
-            throw new Error(errorData.details || 'Payment verification failed');
-        }
-        const verificationData = await verificationResponse.json();
-        debugLog('Payment verification response:', verificationData);
-        if (verificationData.success) {
-            if (paymentStatus) {
-                paymentStatus.textContent = 'Payment successful!';
-            }
-            window.location.href = '/dashboard';
-        } else {
-            throw new Error('Payment verification failed');
-        }
-    } catch (error) {
-        debugLog('Payment verification error:', error);
-        const paymentStatus = document.getElementById('payment-status');
-        if (paymentStatus) {
-            paymentStatus.textContent = 'Payment verification failed. Please contact support.';
-        }
-        showError('Payment verification failed. If amount was deducted, please contact support.');
-    }
-}
 
 // Handle payment modal dismissal
 function handlePaymentModalDismiss() {
