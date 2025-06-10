@@ -748,7 +748,11 @@ async function processUploadedFile(req, res) {
       let analysis;
       try {
         const responseContent = completion.choices[0].message.content;
-        analysis = JSON.parse(responseContent);
+        const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+          throw new Error('No JSON found in OpenAI response');
+        }
+        analysis = JSON.parse(jsonMatch[0]);
         
         // Validate required fields
         const requiredFields = ['recommendation', 'confidenceScore', 'reasoning', 'costEstimate', 'timeEstimate', 'starterTemplate'];
@@ -819,7 +823,12 @@ app.post('/api/analyze', async (req, res, next) => {
         model: "gpt-4",
         messages: [{ role: "user", content: prompt }],
       });
-      const analysis = JSON.parse(completion.choices[0].message.content);
+      const responseContent = completion.choices[0].message.content;
+      const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No JSON found in OpenAI response');
+      }
+      const analysis = JSON.parse(jsonMatch[0]);
       return res.json({ result: JSON.stringify(analysis, null, 2) });
     }
     // ... existing code for paid/regular analysis ...
