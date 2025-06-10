@@ -1175,9 +1175,15 @@ if (generateDemoBtn) {
             });
             if (response.ok) {
                 const data = await response.json();
-                demoResult.innerHTML = `<pre style='white-space:pre-wrap;'>${data.result || 'No result.'}</pre>`;
+                // Parse the result and use displayResults for consistent UI
+                let analysisObj = data.result;
+                if (typeof analysisObj === 'string') {
+                    try { analysisObj = JSON.parse(analysisObj); } catch (e) {}
+                }
+                displayResults(analysisObj);
                 demoUsed = true;
                 localStorage.setItem('demoUsed', 'true');
+                demoModal.style.display = 'none';
             } else {
                 const err = await response.json();
                 demoResult.innerHTML = `<span style='color:red;'>${err.error || 'Error generating report.'}</span>`;
