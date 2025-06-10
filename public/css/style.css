@@ -792,4 +792,21 @@ footer {
 
 .success-container button {
     margin: 0.5rem;
+}
+
+.demo-btn {
+    background: transparent;
+    color: #2970ff;
+    border: 2px solid #2970ff;
+    border-radius: 6px;
+    padding: 0.7em 1.5em;
+    margin-left: 10px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+.demo-btn:hover {
+    background: #2970ff;
+    color: #fff;
 } 

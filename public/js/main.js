@@ -1121,7 +1121,9 @@ function updatePaymentHistory(payments) {
     `).join('');
 }
 
-// DEMO FEATURE
+// DEMO FEATURE LOGIC
+let demoUsed = localStorage.getItem('demoUsed') === 'true';
+
 if (demoBtn) {
     demoBtn.addEventListener('click', () => {
         if (demoUsed) {
@@ -1149,7 +1151,7 @@ if (demoProjectDescription) {
     demoProjectDescription.addEventListener('input', () => {
         const words = demoProjectDescription.value.trim().split(/\s+/).filter(Boolean);
         demoWordCount.textContent = words.length;
-        generateDemoBtn.disabled = words.length < WORD_REQUIREMENT || demoUsed;
+        generateDemoBtn.disabled = words.length < 450 || demoUsed;
     });
 }
 if (generateDemoBtn) {
@@ -1159,7 +1161,7 @@ if (generateDemoBtn) {
             return;
         }
         const description = demoProjectDescription.value.trim();
-        if (description.split(/\s+/).length < WORD_REQUIREMENT) {
+        if (description.split(/\s+/).length < 450) {
             demoResult.innerHTML = '<span style="color:red;">Please enter at least 450 words.</span>';
             return;
         }
