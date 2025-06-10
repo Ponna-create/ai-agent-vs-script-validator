@@ -1122,14 +1122,8 @@ function updatePaymentHistory(payments) {
 }
 
 // DEMO FEATURE LOGIC
-let demoUsed = localStorage.getItem('demoUsed') === 'true';
-
 if (demoBtn) {
     demoBtn.addEventListener('click', () => {
-        if (demoUsed) {
-            alert('You have already used your free demo. Please register or purchase to analyze more projects.');
-            return;
-        }
         demoModal.style.display = 'block';
         demoResult.innerHTML = '';
         demoProjectDescription.value = '';
@@ -1151,15 +1145,11 @@ if (demoProjectDescription) {
     demoProjectDescription.addEventListener('input', () => {
         const words = demoProjectDescription.value.trim().split(/\s+/).filter(Boolean);
         demoWordCount.textContent = words.length;
-        generateDemoBtn.disabled = words.length < 450 || demoUsed;
+        generateDemoBtn.disabled = words.length < 450;
     });
 }
 if (generateDemoBtn) {
     generateDemoBtn.addEventListener('click', async () => {
-        if (demoUsed) {
-            alert('You have already used your free demo.');
-            return;
-        }
         const description = demoProjectDescription.value.trim();
         if (description.split(/\s+/).length < 450) {
             demoResult.innerHTML = '<span style="color:red;">Please enter at least 450 words.</span>';
@@ -1181,8 +1171,6 @@ if (generateDemoBtn) {
                     try { analysisObj = JSON.parse(analysisObj); } catch (e) {}
                 }
                 displayResults(analysisObj);
-                demoUsed = true;
-                localStorage.setItem('demoUsed', 'true');
                 demoModal.style.display = 'none';
             } else {
                 const err = await response.json();
