@@ -3,122 +3,164 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://*.razorpay.com">
     <title>AI Agent vs Script Validator</title>
+    <link rel="icon" type="image/x-icon" href="/images/favicon.ico">
     <link rel="stylesheet" href="css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Razorpay SDK -->
+    <script src="https://checkout.razorpay.com/v1/checkout.js" 
+            crossorigin="anonymous"
+            defer></script>
+            
+    <!-- Main JavaScript -->
+    <script src="/js/main.js" defer></script>
+    
+    <style>
+        /* Payment Status Styles */
+        #payment-status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        #error-message {
+            display: none;
+            background-color: #fee2e2;
+            color: #dc2626;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            text-align: center;
+        }
+        
+        .payment-container {
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .payment-button {
+            background-color: #3b82f6;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+        
+        .payment-button:hover {
+            background-color: #2563eb;
+        }
+        
+        .payment-button:disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+        }
+        
+        /* Your existing styles will be preserved here */
+    </style>
 </head>
 <body>
     <header>
-        <nav>
+        <nav aria-label="Main navigation">
             <div class="logo">
                 <h1>AI Agent vs Script Validator</h1>
             </div>
-            <div class="nav-links">
-                <a href="#features">Features</a>
-                <a href="#testimonials">Testimonials</a>
-                <a href="#faq">FAQ</a>
-                <a href="/refund-policy.html">Refund Policy</a>
+            <div class="nav-links" role="navigation">
+                <a href="#features" aria-label="Features section">Features</a>
+                <a href="#testimonials" aria-label="Testimonials section">Testimonials</a>
+                <a href="#faq" aria-label="FAQ section">FAQ</a>
+                <a href="/refund-policy.html" aria-label="Refund policy">Refund Policy</a>
             </div>
-            <div class="auth-section">
+            <div class="auth-section" role="region" aria-label="Authentication">
                 <!-- Authentication UI will be dynamically inserted here -->
             </div>
-            <div class="hamburger">
+            <button class="hamburger" aria-label="Toggle menu" aria-expanded="false">
                 <span></span>
                 <span></span>
                 <span></span>
-            </div>
+            </button>
         </nav>
     </header>
 
     <main>
-        <section class="hero-section">
+        <section class="hero-section" aria-label="Introduction">
             <h1>AI Agent or Simple Script?</h1>
             <p>Make the right technical decision for your project with our AI-powered analyzer</p>
             <div class="cta-buttons">
                 <button class="primary-btn">Start Analysis</button>
                 <button class="secondary-btn">Learn More</button>
-                <button class="demo-btn" id="demoBtn">Demo</button>
             </div>
         </section>
 
-        <section id="features" class="features-section">
+        <section id="features" class="features-section" aria-label="Features">
             <h2>Key Features</h2>
-            <div class="features-grid">
-                <div class="feature-card">
+            <div class="features-grid" role="list">
+                <div class="feature-card" role="listitem">
                     <h3>Confidence Score</h3>
                     <p>Get a clear confidence score from 1-100 for the recommendation</p>
                 </div>
-                <div class="feature-card">
+                <div class="feature-card" role="listitem">
                     <h3>Cost Estimation</h3>
                     <p>Detailed cost breakdown for both approaches</p>
                 </div>
-                <div class="feature-card">
+                <div class="feature-card" role="listitem">
                     <h3>Code Templates</h3>
                     <p>Get starter code templates for the recommended approach</p>
                 </div>
-                <div class="feature-card">
+                <div class="feature-card" role="listitem">
                     <h3>OpenAI Best Practices</h3>
                     <p>Built following OpenAI's agent-building guidelines for security and reliability</p>
                 </div>
             </div>
         </section>
 
-        <section class="trust-section">
-            <h2>Built with Trust & Transparency</h2>
-            <div class="trust-content">
-                <p class="highlight-text">Designed using OpenAI's agent-building best practices—secure, transparent, and iteratively refined.</p>
-                <div class="trust-points">
-                    <div class="trust-point">
-                        <h4>🔒 Secure by Design</h4>
-                        <p>Implements robust security measures and data protection</p>
-                    </div>
-                    <div class="trust-point">
-                        <h4>🔍 Transparent Analysis</h4>
-                        <p>Clear reasoning and confidence scores for every recommendation</p>
-                    </div>
-                    <div class="trust-point">
-                        <h4>🔄 Iterative Refinement</h4>
-                        <p>Multiple analysis attempts to perfect your solution</p>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section id="analyzer" class="analyzer-section">
+        <section id="analyzer" class="analyzer-section" aria-label="Project analyzer">
             <h2>Project Analyzer</h2>
-            <div class="analyzer-form">
+            <div class="analyzer-form" role="form" aria-label="Analysis form">
                 <textarea 
                     id="projectDescription" 
                     placeholder="Describe your project in detail (minimum 450 words). Include technical requirements, scale, complexity, integration needs, and any specific challenges."
                     rows="10"
+                    aria-label="Project description"
                 ></textarea>
-                <div class="word-count">Words: <span id="wordCount">0</span>/450</div>
-                <button id="analyzeBtn" class="primary-btn" disabled>Analyze Project (₹199)</button>
+                <div class="word-count" aria-live="polite">Words: <span id="wordCount">0</span>/450</div>
+                <button id="analyzeBtn" class="primary-btn" disabled aria-label="Analyze project">Analyze Project (₹199)</button>
             </div>
         </section>
 
-        <section id="testimonials" class="testimonials-section">
+        <section id="testimonials" class="testimonials-section" aria-label="Testimonials">
             <h2>What Developers Say</h2>
-            <div class="testimonials-grid">
-                <div class="testimonial-card">
+            <div class="testimonials-grid" role="list">
+                <div class="testimonial-card" role="listitem">
                     <p>"The analyzer helped me make the right choice between building an AI chatbot vs a rule-based system. Saved weeks of potential rework!"</p>
                     <div class="author">- Sarah K., Senior Developer</div>
                 </div>
-                <div class="testimonial-card">
+                <div class="testimonial-card" role="listitem">
                     <p>"Accurate cost estimates and starter templates made it easy to pitch the right approach to stakeholders."</p>
                     <div class="author">- Mike R., Tech Lead</div>
                 </div>
             </div>
         </section>
 
-        <section id="faq" class="faq-section">
+        <section id="faq" class="faq-section" aria-label="Frequently asked questions">
             <h2>Frequently Asked Questions</h2>
-            <div class="faq-grid">
-                <div class="faq-item">
+            <div class="faq-grid" role="list">
+                <div class="faq-item" role="listitem">
                     <h3>How accurate is the analysis?</h3>
                     <p>Our AI analyzer uses GPT-4 to provide recommendations with detailed confidence scores and reasoning.</p>
                 </div>
-                <div class="faq-item">
+                <div class="faq-item" role="listitem">
                     <h3>Can I refine my analysis?</h3>
                     <p>Yes! You get 2 re-uploads with each analysis to refine your project description and get better recommendations.</p>
                 </div>
@@ -126,9 +168,9 @@
         </section>
     </main>
 
-    <div id="results-modal" class="modal">
+    <div id="results-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <div id="results-content" class="modal-content">
-            <span class="close">&times;</span>
+            <span class="close" aria-label="Close modal">&times;</span>
         </div>
     </div>
 
@@ -147,16 +189,45 @@
         </div>
     </div>
 
-    <footer>
+    <footer role="contentinfo">
         <p>&copy; 2025 AI Agent vs Script Validator. All rights reserved.</p>
-        <div class="footer-links">
-            <a href="/refund-policy.html">Refund Policy</a>
-            <a href="/terms.html">Terms of Service</a>
-            <a href="/privacy.html">Privacy Policy</a>
+        <div class="footer-links" role="navigation" aria-label="Footer navigation">
+            <a href="/refund-policy.html" aria-label="Refund policy">Refund Policy</a>
+            <a href="/terms.html" aria-label="Terms of service">Terms of Service</a>
+            <a href="/privacy.html" aria-label="Privacy policy">Privacy Policy</a>
         </div>
     </footer>
 
-    <script src="js/main.js"></script>
-    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <div class="payment-container" role="region" aria-label="Payment section">
+        <h1>Premium Access</h1>
+        <p>Get access to advanced brain training features and personalized analytics.</p>
+        
+        <div id="payment-status" role="status" aria-live="polite"></div>
+        <div id="error-message" role="alert"></div>
+        
+        <button id="payment-button" 
+            class="payment-button" 
+            data-amount="19900"
+            data-currency="INR"
+            aria-label="Pay ₹199.00">
+        Pay ₹199.00
+    </button>
+    </div>
+
+    <script>
+        // Check if payment function exists
+            window.addEventListener('load', function() {
+        const paymentBtn = document.getElementById('payment-button');
+        if (paymentBtn) {
+            if (typeof window.initializePayment !== 'function') {
+                paymentBtn.disabled = true;
+                const paymentStatus = document.getElementById('payment-status');
+                if (paymentStatus) {
+                    paymentStatus.textContent = 'Payment system is loading...';
+                }
+            }
+        }
+    });
+    </script>
 </body>
 </html> 

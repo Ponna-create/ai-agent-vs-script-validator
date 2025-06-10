@@ -100,4 +100,42 @@ router.post('/razorpay', async (req, res) => {
     }
 });
 
+// Secure Razorpay webhook handler
+router.post('/', express.json({ type: '*/*' }), async (req, res) => {
+    const signature = req.headers['x-razorpay-signature'];
+    if (!verifyWebhookSignature(req.body, signature)) {
+        console.error('Invalid Razorpay webhook signature');
+        return res.status(400).json({ error: 'Invalid signature' });
+    }
+
+    const event = req.body.event;
+    const payload = req.body.payload;
+    console.log('Razorpay webhook event received:', event);
+
+    if (event === 'order.paid') {
+        try {
+            const razorpayOrderId = payload.payment.entity.order_id;
+            const razorpayPaymentId = payload.payment.entity.id;
+            console.log('Processing order.paid for order:', razorpayOrderId, 'payment:', razorpayPaymentId);
+
+            // Update your DB: mark order as paid
+            const result = await prisma.payment.updateMany({
+                where: { razorpayOrderId },
+                data: {
+                    status: 'completed',
+                    razorpayPaymentId,
+                    verifiedAt: new Date()
+                }
+            });
+            console.log('Payment DB update result:', result);
+            // TODO: Add fulfillment logic (email, access, etc.)
+        } catch (err) {
+            console.error('Error processing order.paid webhook:', err);
+            return res.status(500).json({ error: 'Failed to process webhook' });
+        }
+    }
+
+    res.status(200).json({ received: true });
+});
+
 module.exports = router; 
