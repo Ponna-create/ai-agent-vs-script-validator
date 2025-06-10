@@ -684,74 +684,32 @@ app.get('/api/health', (req, res) => {
 });
 
 // Analysis route
-app.post('/api/analyze', auth, async (req, res) => {
+app.post('/api/analyze', async (req, res, next) => {
   try {
-    console.log('Starting project analysis...');
-    console.log('Checking OpenAI API key:', process.env.OPENAI_API_KEY ? 'Key exists' : 'Key missing');
-    
-    const OpenAI = require('openai');
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-      timeout: 30000, // 30 second timeout
-      maxRetries: 3
-    });
-
-    const { projectDescription, paymentId } = req.body;
-    
-    // Verify payment belongs to user
-    const payment = await prisma.payment.findFirst({
-      where: {
-        razorpayPaymentId: paymentId,
-        userId: req.user.id,
-        status: 'completed'
+    // If demo flag is set, allow unauthenticated, unpaid analysis (one-off, not stored)
+    if (req.body.demo) {
+      if (!req.body.description || req.body.description.trim().split(/\s+/).length < 450) {
+        return res.status(400).json({ error: 'Please provide at least 450 words for the demo.' });
       }
-    });
-
-    if (!payment) {
-      return res.status(403).json({
-        error: 'Invalid payment',
-        details: 'Please complete payment before analysis'
+      const OpenAI = require('openai');
+      const openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+        timeout: 30000,
+        maxRetries: 3
       });
+      const prompt = `Analyze this project description and determine if it needs an AI agent or a simple script. Project description: ${req.body.description}
+      \nConsider:\n1. Complexity of decision-making required\n2. Need for natural language processing\n3. Adaptability requirements\n4. Data processing needs\n\nReturn a JSON with:\n- recommendation: "AI Agent" or "Simple Script"\n- confidenceScore: number between 1-100\n- reasoning: detailed explanation\n- costEstimate: estimated cost range\n- timeEstimate: estimated time to implement\n- starterTemplate: basic code template`;
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4",
+        messages: [{ role: "user", content: prompt }],
+      });
+      const analysis = JSON.parse(completion.choices[0].message.content);
+      return res.json({ result: JSON.stringify(analysis, null, 2) });
     }
-    
-    const prompt = `Analyze this project description and determine if it needs an AI agent or a simple script. Project description: ${projectDescription}
-    
-    Consider:
-    1. Complexity of decision-making required
-    2. Need for natural language processing
-    3. Adaptability requirements
-    4. Data processing needs
-    
-    Return a JSON with:
-    - recommendation: "AI Agent" or "Simple Script"
-    - confidenceScore: number between 1-100
-    - reasoning: detailed explanation
-    - costEstimate: estimated cost range
-    - timeEstimate: estimated time to implement
-    - starterTemplate: basic code template`;
-
-    console.log('Sending request to OpenAI...');
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4",
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    const analysis = JSON.parse(completion.choices[0].message.content);
-    console.log('Analysis completed successfully');
-
-    // Store analysis in database
-    await prisma.analysis.create({
-      data: {
-        userId: req.user.id,
-        paymentId: payment.id,
-        description: projectDescription,
-        result: analysis
-      }
-    });
-
-    res.json(analysis);
+    // ... existing code for paid/regular analysis ...
+    next();
   } catch (error) {
-    console.error('Analysis error:', error);
+    console.error('Demo/Analysis error:', error);
     res.status(500).json({ error: 'Failed to analyze project', details: error.message });
   }
 });

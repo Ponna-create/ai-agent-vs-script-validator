@@ -11,6 +11,15 @@ const userStatus = document.getElementById('user-status');
 const hamburger = document.querySelector('.hamburger');
 const navLinks = document.querySelector('.nav-links');
 
+// DEMO FEATURE
+const demoBtn = document.getElementById('demoBtn');
+const demoModal = document.getElementById('demo-modal');
+const closeDemoModal = document.getElementById('closeDemoModal');
+const demoProjectDescription = document.getElementById('demoProjectDescription');
+const demoWordCount = document.getElementById('demoWordCount');
+const generateDemoBtn = document.getElementById('generateDemoBtn');
+const demoResult = document.getElementById('demoResult');
+
 // Constants
 const WORD_REQUIREMENT = 450;
 const ANALYSIS_PRICE = 199;
@@ -24,6 +33,9 @@ let currentUser = null;
 
 // Add debugging flag
 const DEBUG_MODE = true;
+
+// Only allow one demo per session
+let demoUsed = localStorage.getItem('demoUsed') === 'true';
 
 function debugLog(message, data = '') {
     if (DEBUG_MODE) {
@@ -467,12 +479,19 @@ async function initiatePayment() {
         modal.style.display = 'block';
 
         // Create Razorpay order
+        const paymentButton = document.getElementById('payment-button');
+        const amountInPaise = parseInt(paymentButton.getAttribute('data-amount'));
+        debugLog('Payment amount in paise:', amountInPaise);
         const orderResponse = await fetch('/api/create-payment', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${authToken}`
-            }
+            },
+            body: JSON.stringify({
+                amount: amountInPaise,
+                currency: 'INR'
+            })
         });
         
         debugLog('Payment creation response:', {
@@ -494,7 +513,7 @@ async function initiatePayment() {
 
         // Initialize Razorpay
         const options = {
-            key: orderData.key,
+            key: orderData.key || orderData.key_id,
             amount: orderData.amount,
             currency: orderData.currency,
             name: "AI Agent vs Script Validator",
@@ -505,30 +524,21 @@ async function initiatePayment() {
                 email: currentUser?.email || ''
             },
             handler: async function(response) {
-                debugLog('Payment callback received:', response);
-                
-                if (!response.razorpay_payment_id || !response.razorpay_order_id || !response.razorpay_signature) {
-                    throw new Error('Incomplete payment response received');
-                }
-
-                // Show processing state
-                modalContent.innerHTML = `
-                    <div class="loading-container">
-                        <h3>Verifying Payment...</h3>
-                        <p>Please wait while we confirm your payment...</p>
-                        <div class="loading-spinner"></div>
-                    </div>
-                `;
-                modal.style.display = 'block';
-
+                debugLog('Razorpay payment success callback fired:', response);
                 try {
-                    debugLog('Starting payment verification...', response);
-                    
-                    // Add retry logic for verification
+                    // Show processing state
+                    modalContent.innerHTML = `
+                        <div class="loading-container">
+                            <h3>Verifying Payment...</h3>
+                            <p>Please wait while we confirm your payment...</p>
+                            <div class="loading-spinner"></div>
+                        </div>
+                    `;
+                    modal.style.display = 'block';
+                    debugLog('About to call /api/verify-payment...');
                     let retryCount = 0;
                     const maxRetries = 3;
-                    const retryDelay = 2000; // 2 seconds
-
+                    const retryDelay = 2000;
                     async function verifyWithRetry() {
                         try {
                             const verifyResponse = await fetch('/api/verify-payment', {
@@ -543,36 +553,17 @@ async function initiatePayment() {
                                     razorpay_signature: response.razorpay_signature
                                 })
                             });
-
                             const verifyResult = await verifyResponse.json();
                             debugLog('Verification response:', verifyResult);
-
                             if (!verifyResponse.ok) {
                                 throw new Error(verifyResult.error || verifyResult.details || 'Payment verification failed');
                             }
-
                             if (verifyResult.success) {
                                 currentPaymentId = verifyResult.paymentId;
                                 analysesRemaining = verifyResult.uploadsRemaining || 1;
-                                
-                                // Check if project description is ready for analysis
-                                const words = projectDescription.value.trim().split(/\s+/).length;
-                                
-                                // Close Razorpay modal first
-                                if (rzp) {
-                                    rzp.close();
-                                }
-                                
-                                // Hide our processing modal
+                                if (rzp) rzp.close();
                                 modal.style.display = 'none';
-                                
-                                if (words >= WORD_REQUIREMENT) {
-                                    // Automatically trigger analysis
-                                    handleAnalyze();
-                                } else {
-                                    showSuccess('Payment successful! Please enter your project description to start analysis.');
-                                }
-                                
+                                showSuccess('Payment successful! Please enter your project description to start analysis.');
                                 updateAnalysisCount();
                                 return true;
                             } else {
@@ -589,12 +580,41 @@ async function initiatePayment() {
                             throw error;
                         }
                     }
-
-                    await verifyWithRetry();
+                    try {
+                        await verifyWithRetry();
+                    } catch (verifyError) {
+                        debugLog('Verification failed after retries, starting status polling...');
+                        // Poll payment status endpoint for up to 30 seconds
+                        const pollInterval = 2000;
+                        const maxPollTime = 30000;
+                        let elapsed = 0;
+                        let status = null;
+                        while (elapsed < maxPollTime) {
+                            try {
+                                const statusRes = await fetch(`/api/payment/status/${response.razorpay_order_id}`, {
+                                    headers: { 'Authorization': `Bearer ${authToken}` }
+                                });
+                                const statusData = await statusRes.json();
+                                debugLog('Polled payment status:', statusData);
+                                if (statusRes.ok && statusData.status === 'completed') {
+                                    analysesRemaining = statusData.uploadsRemaining || 1;
+                                    if (rzp) rzp.close();
+                                    modal.style.display = 'none';
+                                    showSuccess('Payment successful! Please enter your project description to start analysis.');
+                                    updateAnalysisCount();
+                                    return;
+                                }
+                            } catch (pollError) {
+                                debugLog('Polling error:', pollError);
+                            }
+                            await new Promise(resolve => setTimeout(resolve, pollInterval));
+                            elapsed += pollInterval;
+                        }
+                        showError('Payment was received but could not be verified in time. If money was deducted, please contact support with your payment/order ID.');
+                    }
                 } catch (error) {
-                    debugLog('All verification attempts failed:', error);
+                    debugLog('Error in payment success handler:', error);
                     showError(`Payment verification failed: ${error.message}. If payment was deducted, please contact support with payment ID: ${response.razorpay_payment_id}`);
-                    throw error;
                 }
             },
             modal: {
@@ -608,7 +628,7 @@ async function initiatePayment() {
                     debugLog('Back button pressed in payment modal');
                     return false;
                 },
-                confirm_close: true
+                confirm_close: true,
             },
             theme: {
                 color: "#2563eb"
@@ -619,12 +639,12 @@ async function initiatePayment() {
             },
             timeout: 900
         };
-
-        // Close our loading modal before opening Razorpay
-        modal.style.display = 'none';
-
-        // Create and open Razorpay
-        rzp = new Razorpay(options);
+        debugLog('Razorpay options:', options);
+        const rzp = new Razorpay(options);
+        rzp.on('payment.failed', function(response) {
+            debugLog('Razorpay payment failed event:', response);
+            showError('Payment failed. Please try again or contact support.');
+        });
         rzp.open();
         debugLog('Razorpay modal opened');
 
@@ -1119,4 +1139,71 @@ function updatePaymentHistory(payments) {
             }
         </div>
     `).join('');
+}
+
+// DEMO FEATURE
+if (demoBtn) {
+    demoBtn.addEventListener('click', () => {
+        if (demoUsed) {
+            alert('You have already used your free demo. Please register or purchase to analyze more projects.');
+            return;
+        }
+        demoModal.style.display = 'block';
+        demoResult.innerHTML = '';
+        demoProjectDescription.value = '';
+        demoWordCount.textContent = '0';
+        generateDemoBtn.disabled = true;
+    });
+}
+if (closeDemoModal) {
+    closeDemoModal.onclick = () => {
+        demoModal.style.display = 'none';
+    };
+}
+window.onclick = function(event) {
+    if (event.target === demoModal) {
+        demoModal.style.display = 'none';
+    }
+};
+if (demoProjectDescription) {
+    demoProjectDescription.addEventListener('input', () => {
+        const words = demoProjectDescription.value.trim().split(/\s+/).filter(Boolean);
+        demoWordCount.textContent = words.length;
+        generateDemoBtn.disabled = words.length < WORD_REQUIREMENT || demoUsed;
+    });
+}
+if (generateDemoBtn) {
+    generateDemoBtn.addEventListener('click', async () => {
+        if (demoUsed) {
+            alert('You have already used your free demo.');
+            return;
+        }
+        const description = demoProjectDescription.value.trim();
+        if (description.split(/\s+/).length < WORD_REQUIREMENT) {
+            demoResult.innerHTML = '<span style="color:red;">Please enter at least 450 words.</span>';
+            return;
+        }
+        generateDemoBtn.disabled = true;
+        demoResult.innerHTML = 'Generating report...';
+        try {
+            const response = await fetch('/api/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ description, demo: true })
+            });
+            if (response.ok) {
+                const data = await response.json();
+                demoResult.innerHTML = `<pre style='white-space:pre-wrap;'>${data.result || 'No result.'}</pre>`;
+                demoUsed = true;
+                localStorage.setItem('demoUsed', 'true');
+            } else {
+                const err = await response.json();
+                demoResult.innerHTML = `<span style='color:red;'>${err.error || 'Error generating report.'}</span>`;
+                generateDemoBtn.disabled = false;
+            }
+        } catch (e) {
+            demoResult.innerHTML = `<span style='color:red;'>Error: ${e.message}</span>`;
+            generateDemoBtn.disabled = false;
+        }
+    });
 } 
