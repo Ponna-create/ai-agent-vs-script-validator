@@ -30,6 +30,19 @@ router.post('/create-payment', auth, async (req, res) => {
                 success: false
             });
         }
+        
+        // Verify Razorpay instance has required methods
+        if (!razorpay.orders || typeof razorpay.orders.create !== 'function') {
+            console.error('Razorpay instance is invalid:', {
+                hasOrders: !!razorpay.orders,
+                hasCreateFunction: razorpay.orders && typeof razorpay.orders.create === 'function'
+            });
+            return res.status(500).json({
+                error: 'Payment service configuration error',
+                details: 'Razorpay instance is not properly configured',
+                success: false
+            });
+        }
 
         const { amount, currency = 'INR' } = req.body;
         console.log('Creating order with:', { amount, currency, userId: req.user.id });
@@ -58,23 +71,38 @@ router.post('/create-payment', auth, async (req, res) => {
         const receipt = `order_${Date.now()}_${String(req.user.id).slice(-10)}`.slice(0, 40);
         
         let order;
+        const orderData = {
+            amount: numericAmount,
+            currency: currency || 'INR',
+            receipt: receipt,
+            notes: {
+                userId: req.user.id,
+                userEmail: req.user.email || 'not_provided'
+            }
+        };
+        
+        console.log('Creating Razorpay order with data:', {
+            amount: orderData.amount,
+            currency: orderData.currency,
+            receipt: orderData.receipt,
+            notes: orderData.notes
+        });
+        
         try {
-            order = await razorpay.orders.create({
-                amount: numericAmount,
-                currency: currency || 'INR',
-                receipt: receipt,
-                notes: {
-                    userId: req.user.id,
-                    userEmail: req.user.email || 'not_provided'
-                }
+            order = await razorpay.orders.create(orderData);
+            console.log('Razorpay order created successfully:', {
+                id: order.id,
+                amount: order.amount,
+                currency: order.currency,
+                status: order.status
             });
-            console.log('Razorpay order created successfully:', order.id);
         } catch (razorpayError) {
             console.error('Razorpay order creation failed:', {
                 message: razorpayError.message,
                 code: razorpayError.code,
                 status: razorpayError.status,
-                details: razorpayError.error
+                details: razorpayError.error,
+                orderData: orderData
             });
             throw new Error(`Razorpay order creation failed: ${razorpayError.message}`);
         }
