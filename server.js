@@ -242,15 +242,18 @@ app.use(helmet({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Mount user routes
-app.use('/api/user', userRoutes);
-app.use('/api/payment', paymentRoutes);
-
 // Add timeout middleware
 app.use(timeout('30s'));
 app.use((req, res, next) => {
   if (!req.timedout) next();
 });
+
+// Mount user routes
+app.use('/api/user', userRoutes);
+app.use('/api/payment', paymentRoutes);
+
+// Mount webhook routes (no authentication required)
+app.use('/webhook', webhookRoutes);
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -721,9 +724,6 @@ app.use('/api/user/login', loginLimiter);
 
 // Apply general API rate limit to all other routes
 app.use('/api', apiLimiter);
-
-// Mount webhook routes (no authentication required)
-app.use('/webhook', webhookRoutes);
 
 // Handle all other routes by serving index.html
 app.get('*', (req, res) => {
