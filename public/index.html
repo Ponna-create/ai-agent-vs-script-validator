@@ -215,20 +215,60 @@
     </button>
     </div>
 
+    <!-- Debug Panel -->
+    <div id="debug-panel" style="position: fixed; top: 10px; right: 10px; background: #f0f0f0; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 12px; z-index: 9999; display: none;">
+        <h4>Debug Info</h4>
+        <p>Token: <span id="debug-token">NONE</span></p>
+        <p>User: <span id="debug-user">NONE</span></p>
+        <p>Button: <span id="debug-button">NOT FOUND</span></p>
+        <p>Razorpay: <span id="debug-razorpay">NOT LOADED</span></p>
+        <p>Payment Function: <span id="debug-payment-fn">NOT FOUND</span></p>
+        <button onclick="forceLogout()">Force Logout</button>
+        <button onclick="testPayment()">Test Payment</button>
+        <button onclick="toggleDebug()">Hide</button>
+    </div>
+
     <script>
         // Check if payment function exists
-            window.addEventListener('load', function() {
-        const paymentBtn = document.getElementById('payment-button');
-        if (paymentBtn) {
-            if (typeof window.initializePayment !== 'function') {
-                paymentBtn.disabled = true;
-                const paymentStatus = document.getElementById('payment-status');
-                if (paymentStatus) {
-                    paymentStatus.textContent = 'Payment system is loading...';
+        window.addEventListener('load', function() {
+            const paymentBtn = document.getElementById('payment-button');
+            if (paymentBtn) {
+                if (typeof window.initializePayment !== 'function') {
+                    paymentBtn.disabled = true;
+                    const paymentStatus = document.getElementById('payment-status');
+                    if (paymentStatus) {
+                        paymentStatus.textContent = 'Payment system is loading...';
+                    }
                 }
             }
+            
+            // Update debug panel
+            updateDebugPanel();
+        });
+        
+        // Debug functions
+        function toggleDebug() {
+            const debugPanel = document.getElementById('debug-panel');
+            if (debugPanel) {
+                debugPanel.style.display = debugPanel.style.display === 'none' ? 'block' : 'none';
+            }
         }
-    });
+        
+        function testPayment() {
+            console.log('Testing payment initialization...');
+            if (typeof window.initializePayment === 'function') {
+                console.log('Payment function is available');
+            } else {
+                console.error('Payment function not available');
+            }
+        }
+        
+        // Show debug panel on Ctrl+Shift+D
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+                toggleDebug();
+            }
+        });
     </script>
 </body>
 </html> 

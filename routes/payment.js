@@ -19,7 +19,7 @@ try {
 }
 
 // Create a new payment order
-router.post('/create-order', auth, async (req, res) => {
+router.post('/create-payment', auth, async (req, res) => {
     try {
         // Check if Razorpay is initialized
         if (!razorpay) {
@@ -81,6 +81,7 @@ router.post('/create-order', auth, async (req, res) => {
 
         res.json({
             success: true,
+            key: process.env.RAZORPAY_KEY_ID,
             key_id: process.env.RAZORPAY_KEY_ID,
             amount: order.amount,
             currency: order.currency,

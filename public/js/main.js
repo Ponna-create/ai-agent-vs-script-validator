@@ -45,10 +45,14 @@ function updateDebugPanel() {
     const debugToken = document.getElementById('debug-token');
     const debugUser = document.getElementById('debug-user');
     const debugButton = document.getElementById('debug-button');
+    const debugRazorpay = document.getElementById('debug-razorpay');
+    const debugPaymentFn = document.getElementById('debug-payment-fn');
     
     if (debugToken) debugToken.textContent = authToken ? 'EXISTS' : 'NONE';
     if (debugUser) debugUser.textContent = currentUser ? currentUser.email : 'NONE';
     if (debugButton) debugButton.textContent = analyzeBtn ? analyzeBtn.textContent : 'NOT FOUND';
+    if (debugRazorpay) debugRazorpay.textContent = typeof Razorpay !== 'undefined' ? 'LOADED' : 'NOT LOADED';
+    if (debugPaymentFn) debugPaymentFn.textContent = typeof window.initializePayment === 'function' ? 'AVAILABLE' : 'NOT FOUND';
 }
 
 function forceLogout() {
@@ -435,11 +439,19 @@ async function handleAnalyze() {
 }
 
 function showPaymentModal() {
+    // Check if user is authenticated
+    if (!authToken || !currentUser) {
+        showError('Please log in to make a payment');
+        showLoginModal();
+        return;
+    }
+
     modalContent.innerHTML = `
         <div class="payment-form">
             <h2>Purchase Analysis Credits</h2>
             <p>Get 1 project analysis for ₹${ANALYSIS_PRICE}</p>
             <button onclick="window.initializePayment()" class="primary-btn">Pay ₹${ANALYSIS_PRICE}</button>
+            <p class="small">Secure payment powered by Razorpay</p>
         </div>
     `;
     modal.style.display = 'block';
@@ -493,13 +505,13 @@ async function initiatePayment() {
             ok: orderResponse.ok
         });
 
-        if (!response.ok) {
-            const errorData = await response.json();
+        if (!orderResponse.ok) {
+            const errorData = await orderResponse.json();
             debugLog('Payment order creation failed:', errorData);
             throw new Error(errorData.error || 'Failed to create payment order');
         }
 
-        const orderData = await response.json();
+        const orderData = await orderResponse.json();
         debugLog('Order created:', orderData);
 
         const options = {
@@ -628,12 +640,18 @@ async function initiatePayment() {
         // Close our loading modal before opening Razorpay
         modal.style.display = 'none';
 
+        // Check if Razorpay is available
+        if (typeof Razorpay === 'undefined') {
+            throw new Error('Razorpay SDK not loaded. Please refresh the page and try again.');
+        }
+
         // Create and open Razorpay
         rzp = new Razorpay(options);
         rzp.open();
     } catch (error) {
         debugLog('Payment initialization failed:', error);
-        showError('Failed to initialize payment. Please try again later.');
+        modal.style.display = 'none';
+        showError(`Payment initialization failed: ${error.message}. Please try again later.`);
     }
 };
 
@@ -1120,6 +1138,9 @@ function updatePaymentHistory(payments) {
         </div>
     `).join('');
 }
+
+// Make payment function globally available
+window.initializePayment = initiatePayment;
 
 // DEMO FEATURE LOGIC
 if (demoBtn) {
