@@ -53,31 +53,51 @@ router.post('/create-payment', auth, async (req, res) => {
         }
 
         // Create order in Razorpay
-        console.log('Creating Razorpay order...');
+        console.log('Creating Razorpay order with amount:', numericAmount);
         // Ensure receipt is no more than 40 characters
         const receipt = `order_${Date.now()}_${String(req.user.id).slice(-10)}`.slice(0, 40);
-        const order = await razorpay.orders.create({
-            amount: numericAmount,
-            currency,
-            receipt,
-            notes: {
-                userId: req.user.id
-            }
-        });
-        console.log('Razorpay order created:', order.id);
+        
+        let order;
+        try {
+            order = await razorpay.orders.create({
+                amount: numericAmount,
+                currency: currency || 'INR',
+                receipt: receipt,
+                notes: {
+                    userId: req.user.id,
+                    userEmail: req.user.email || 'not_provided'
+                }
+            });
+            console.log('Razorpay order created successfully:', order.id);
+        } catch (razorpayError) {
+            console.error('Razorpay order creation failed:', {
+                message: razorpayError.message,
+                code: razorpayError.code,
+                status: razorpayError.status,
+                details: razorpayError.error
+            });
+            throw new Error(`Razorpay order creation failed: ${razorpayError.message}`);
+        }
 
         // Create payment record in database
         console.log('Creating payment record...');
-        const payment = await prisma.payment.create({
-            data: {
-                userId: req.user.id,
-                amount: numericAmount,
-                razorpayOrderId: order.id,
-                status: 'pending',
-                uploadsRemaining: 1
-            }
-        });
-        console.log('Payment record created:', payment.id);
+        let payment;
+        try {
+            payment = await prisma.payment.create({
+                data: {
+                    userId: req.user.id,
+                    amount: numericAmount,
+                    razorpayOrderId: order.id,
+                    status: 'pending',
+                    uploadsRemaining: 1
+                }
+            });
+            console.log('Payment record created successfully:', payment.id);
+        } catch (dbError) {
+            console.error('Database payment record creation failed:', dbError);
+            // Don't fail the entire request if DB fails, but log it
+            console.warn('Continuing without database record due to DB error');
+        }
 
         res.json({
             success: true,
