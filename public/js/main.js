@@ -497,7 +497,11 @@ async function initiatePayment() {
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${authToken}`
-            }
+            },
+            body: JSON.stringify({
+                amount: ANALYSIS_PRICE * 100, // Convert to paisa
+                currency: 'INR'
+            })
         });
         
         debugLog('Payment creation response:', {
