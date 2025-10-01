@@ -492,6 +492,12 @@ async function initiatePayment() {
         modal.style.display = 'block';
 
         // Create Razorpay order
+        debugLog('Sending payment request with:', {
+            amount: ANALYSIS_PRICE * 100,
+            currency: 'INR',
+            endpoint: '/api/payment/create-payment'
+        });
+        
         const orderResponse = await fetch('/api/payment/create-payment', {
             method: 'POST',
             headers: {
@@ -510,7 +516,14 @@ async function initiatePayment() {
         });
 
         if (!orderResponse.ok) {
-            const errorData = await orderResponse.json();
+            let errorData;
+            try {
+                errorData = await orderResponse.json();
+            } catch (parseError) {
+                const responseText = await orderResponse.text();
+                debugLog('Failed to parse error response:', responseText);
+                throw new Error(`Server error (${orderResponse.status}): ${responseText.substring(0, 100)}`);
+            }
             debugLog('Payment order creation failed:', errorData);
             throw new Error(errorData.error || 'Failed to create payment order');
         }
