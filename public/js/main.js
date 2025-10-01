@@ -492,7 +492,7 @@ async function initiatePayment() {
         modal.style.display = 'block';
 
         // Create Razorpay order
-        const orderResponse = await fetch('/api/create-payment', {
+        const orderResponse = await fetch('/api/payment/create-payment', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
