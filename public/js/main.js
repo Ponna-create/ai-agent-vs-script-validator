@@ -47,7 +47,7 @@ function updateDebugPanel() {
     const debugButton = document.getElementById('debug-button');
     const debugRazorpay = document.getElementById('debug-razorpay');
     const debugPaymentFn = document.getElementById('debug-payment-fn');
-    
+
     if (debugToken) debugToken.textContent = authToken ? 'EXISTS' : 'NONE';
     if (debugUser) debugUser.textContent = currentUser ? currentUser.email : 'NONE';
     if (debugButton) debugButton.textContent = analyzeBtn ? analyzeBtn.textContent : 'NOT FOUND';
@@ -81,7 +81,7 @@ async function checkAuthStatus() {
     debugLog('Checking authentication status...');
     const token = localStorage.getItem('authToken');
     debugLog('Token from localStorage:', token ? 'Token exists' : 'No token');
-    
+
     if (token) {
         try {
             debugLog('Validating token with server...');
@@ -90,9 +90,9 @@ async function checkAuthStatus() {
                     'Authorization': `Bearer ${token}`
                 }
             });
-            
+
             debugLog('Profile response status:', response.status);
-            
+
             if (response.ok) {
                 const data = await response.json();
                 currentUser = data.user;
@@ -127,7 +127,7 @@ function updateUIForLoggedInUser() {
     }
 
     debugLog('Updating UI for logged in user:', currentUser);
-    
+
     const authSection = document.querySelector('.auth-section');
     if (authSection) {
         authSection.innerHTML = `
@@ -135,7 +135,7 @@ function updateUIForLoggedInUser() {
             <button onclick="logout()" class="secondary-btn">Logout</button>
         `;
     }
-    
+
     const userStatus = document.getElementById('user-status');
     if (userStatus) {
         userStatus.className = 'user-status logged-in';
@@ -144,7 +144,7 @@ function updateUIForLoggedInUser() {
             <small>You can now proceed with project analysis</small>
         `;
     }
-    
+
     // Re-enable analysis if word count is sufficient
     updateWordCount();
 }
@@ -158,7 +158,7 @@ function updateUIForLoggedOutUser() {
             <button onclick="showRegisterModal()" class="secondary-btn">Register</button>
         `;
     }
-    
+
     const userStatus = document.getElementById('user-status');
     if (userStatus) {
         userStatus.className = 'user-status logged-out';
@@ -167,7 +167,7 @@ function updateUIForLoggedOutUser() {
             <small>Create an account to get started</small>
         `;
     }
-    
+
     updateWordCount();
 }
 
@@ -217,7 +217,7 @@ function showRegisterModal() {
 async function login(email, password) {
     try {
         debugLog('Attempting login for:', email);
-        
+
         const response = await fetch('/api/user/login', {
             method: 'POST',
             headers: {
@@ -227,22 +227,22 @@ async function login(email, password) {
         });
 
         const data = await response.json();
-        
+
         if (!response.ok) {
             throw new Error(data.error || 'Login failed');
         }
 
         debugLog('Login successful:', { userId: data.user.id, token: data.token ? 'present' : 'missing' });
-        
+
         // Set authentication state
         authToken = data.token;
         currentUser = data.user;
         localStorage.setItem('authToken', authToken);
-        
+
         // Update UI
         updateUIForLoggedInUser();
         hideModal();
-        
+
         return true;
     } catch (error) {
         debugLog('Login error:', error);
@@ -271,7 +271,7 @@ async function register(event) {
 
         const data = await response.json();
         debugLog('Registration response:', { status: response.status, success: response.ok });
-        
+
         if (response.ok) {
             localStorage.setItem('authToken', data.token);
             authToken = data.token;
@@ -311,7 +311,7 @@ if (startAnalysisBtn) {
     startAnalysisBtn.addEventListener('click', () => {
         const analyzerSection = document.getElementById('analyzer');
         if (analyzerSection) {
-            analyzerSection.scrollIntoView({ 
+            analyzerSection.scrollIntoView({
                 behavior: 'smooth',
                 block: 'start'
             });
@@ -327,7 +327,7 @@ if (learnMoreBtn) {
     learnMoreBtn.addEventListener('click', () => {
         const featuresSection = document.getElementById('features');
         if (featuresSection) {
-            featuresSection.scrollIntoView({ 
+            featuresSection.scrollIntoView({
                 behavior: 'smooth',
                 block: 'start'
             });
@@ -339,7 +339,7 @@ if (learnMoreBtn) {
 function scrollToAnalyzer() {
     const analyzerSection = document.getElementById('analyzer');
     if (analyzerSection) {
-        analyzerSection.scrollIntoView({ 
+        analyzerSection.scrollIntoView({
             behavior: 'smooth',
             block: 'start'
         });
@@ -353,7 +353,7 @@ function scrollToAnalyzer() {
 function scrollToFeatures() {
     const featuresSection = document.getElementById('features');
     if (featuresSection) {
-        featuresSection.scrollIntoView({ 
+        featuresSection.scrollIntoView({
             behavior: 'smooth',
             block: 'start'
         });
@@ -369,27 +369,27 @@ function updateWordCount() {
 
     const words = projectDescription.value.trim().split(/\s+/).length;
     wordCount.textContent = words;
-    
+
     debugLog('Authentication state check:', {
         hasToken: !!authToken,
         hasUser: !!currentUser,
         wordCount: words,
         wordRequirement: WORD_REQUIREMENT
     });
-    
+
     if (!authToken || !currentUser) {
         analyzeBtn.textContent = 'Login to Analyze';
         analyzeBtn.disabled = true;
         debugLog('Button disabled - not authenticated');
     } else {
-        analyzeBtn.textContent = words < WORD_REQUIREMENT ? 
-            `Enter at least ${WORD_REQUIREMENT} words` : 
+        analyzeBtn.textContent = words < WORD_REQUIREMENT ?
+            `Enter at least ${WORD_REQUIREMENT} words` :
             'Analyze Project';
         analyzeBtn.disabled = words < WORD_REQUIREMENT;
-        debugLog('Button state:', { 
-            enabled: words >= WORD_REQUIREMENT, 
+        debugLog('Button state:', {
+            enabled: words >= WORD_REQUIREMENT,
             wordCount: words,
-            required: WORD_REQUIREMENT 
+            required: WORD_REQUIREMENT
         });
     }
 }
@@ -397,7 +397,7 @@ function updateWordCount() {
 // Payment and Analysis Functions
 async function handleAnalyze() {
     const words = projectDescription.value.trim().split(/\s+/).length;
-    
+
     if (words < WORD_REQUIREMENT) {
         showError(`Please enter at least ${WORD_REQUIREMENT} words for analysis`);
         return;
@@ -428,7 +428,7 @@ async function handleAnalyze() {
         if (response.ok) {
             const result = await response.json();
             analysesRemaining--;
-            showAnalysisResults(result);
+            displayResults(result);
             updateAnalysisCount();
         } else {
             throw new Error('Analysis failed');
@@ -457,29 +457,10 @@ function showPaymentModal() {
     modal.style.display = 'block';
 }
 
-function updateAnalysisCount() {
-    const authSection = document.querySelector('.auth-section');
-    if (authSection && currentUser) {
-        if (analysesRemaining > 0) {
-            authSection.innerHTML = `
-                <span>Welcome, ${currentUser.name || currentUser.email}</span>
-                <small>(${analysesRemaining} analyses remaining)</small>
-                <button onclick="logout()" class="secondary-btn">Logout</button>
-            `;
-        } else {
-            authSection.innerHTML = `
-                <span>Welcome, ${currentUser.name || currentUser.email}</span>
-                <button onclick="showPaymentModal()" class="primary-btn">Buy More Analyses</button>
-                <button onclick="logout()" class="secondary-btn">Logout</button>
-            `;
-        }
-    }
-}
-
 async function initiatePayment() {
     debugLog('Initiating payment process...');
     let rzp = null;
-    
+
     try {
         // Show loading state
         modalContent.innerHTML = `
@@ -497,7 +478,7 @@ async function initiatePayment() {
             currency: 'INR',
             endpoint: '/api/payment/create-payment'
         });
-        
+
         const orderResponse = await fetch('/api/payment/create-payment', {
             method: 'POST',
             headers: {
@@ -509,7 +490,7 @@ async function initiatePayment() {
                 currency: 'INR'
             })
         });
-        
+
         debugLog('Payment creation response:', {
             status: orderResponse.status,
             ok: orderResponse.ok
@@ -538,9 +519,9 @@ async function initiatePayment() {
             name: 'AI Agent vs Script Validator',
             description: 'Premium Access',
             order_id: orderData.id,
-            handler: async function(response) {
+            handler: async function (response) {
                 debugLog('Payment callback received:', response);
-                
+
                 if (!response.razorpay_payment_id || !response.razorpay_order_id || !response.razorpay_signature) {
                     throw new Error('Incomplete payment response received');
                 }
@@ -557,7 +538,7 @@ async function initiatePayment() {
 
                 try {
                     debugLog('Starting payment verification...', response);
-                    
+
                     // Add retry logic for verification
                     let retryCount = 0;
                     const maxRetries = 3;
@@ -565,7 +546,7 @@ async function initiatePayment() {
 
                     async function verifyWithRetry() {
                         try {
-                            const verifyResponse = await fetch('/api/verify-payment', {
+                            const verifyResponse = await fetch('/api/payment/verify-payment', {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json',
@@ -588,25 +569,25 @@ async function initiatePayment() {
                             if (verifyResult.success) {
                                 currentPaymentId = verifyResult.paymentId;
                                 analysesRemaining = verifyResult.uploadsRemaining || 1;
-                                
+
                                 // Check if project description is ready for analysis
                                 const words = projectDescription.value.trim().split(/\s+/).length;
-                                
+
                                 // Close Razorpay modal first
                                 if (rzp) {
                                     rzp.close();
                                 }
-                                
+
                                 // Hide our processing modal
                                 modal.style.display = 'none';
-                                
+
                                 if (words >= WORD_REQUIREMENT) {
                                     // Automatically trigger analysis
                                     handleAnalyze();
                                 } else {
                                     showSuccess('Payment successful! Please enter your project description to start analysis.');
                                 }
-                                
+
                                 updateAnalysisCount();
                                 return true;
                             } else {
@@ -632,13 +613,13 @@ async function initiatePayment() {
                 }
             },
             modal: {
-                ondismiss: function() {
+                ondismiss: function () {
                     debugLog('Payment modal dismissed');
-                    modal.style.display = 'none';
+                    handlePaymentModalDismiss();
                 },
                 escape: false,
                 backdropClose: false,
-                handleback: function() {
+                handleback: function () {
                     debugLog('Back button pressed in payment modal');
                     return false;
                 },
@@ -670,14 +651,13 @@ async function initiatePayment() {
         modal.style.display = 'none';
         showError(`Payment initialization failed: ${error.message}. Please try again later.`);
     }
-};
+}
 
-// Handle payment modal dismissal
 function handlePaymentModalDismiss() {
     debugLog('Payment modal dismissed');
     const paymentStatus = document.getElementById('payment-status');
     const paymentButton = document.getElementById('payment-button');
-    
+
     if (paymentStatus) {
         paymentStatus.textContent = 'Payment cancelled';
     }
@@ -686,19 +666,18 @@ function handlePaymentModalDismiss() {
     }
 }
 
-// Handle payment failure
 function handlePaymentFailure(response) {
     debugLog('Payment failed:', response.error || response);
     const paymentStatus = document.getElementById('payment-status');
     const paymentButton = document.getElementById('payment-button');
-    
+
     if (paymentStatus) {
         paymentStatus.textContent = 'Payment failed';
     }
     if (paymentButton) {
         paymentButton.disabled = false;
     }
-    
+
     // Show user-friendly error message
     let errorMessage = 'Payment failed. ';
     if (response.error?.description) {
@@ -710,11 +689,29 @@ function handlePaymentFailure(response) {
     } else {
         errorMessage += 'Please try again later.';
     }
-    
+
     showError(errorMessage);
 }
 
-// UI Functions
+function updateAnalysisCount() {
+    const authSection = document.querySelector('.auth-section');
+    if (authSection && currentUser) {
+        if (analysesRemaining > 0) {
+            authSection.innerHTML = `
+                <span>Welcome, ${currentUser.name || currentUser.email}</span>
+                <small>(${analysesRemaining} analyses remaining)</small>
+                <button onclick="logout()" class="secondary-btn">Logout</button>
+            `;
+        } else {
+            authSection.innerHTML = `
+                <span>Welcome, ${currentUser.name || currentUser.email}</span>
+                <button onclick="showPaymentModal()" class="primary-btn">Buy More Analyses</button>
+                <button onclick="logout()" class="secondary-btn">Logout</button>
+            `;
+        }
+    }
+}
+
 function showModal(content) {
     if (!modal || !modalContent) {
         console.error('Modal elements not found');
@@ -744,6 +741,12 @@ function showError(message) {
     }
 }
 
+function showSuccess(message) {
+    // Implement showSuccess similar to showError but green
+    debugLog('Showing success:', message);
+    alert(message); // Placeholder
+}
+
 function displayResults(analysis) {
     if (!analysis) {
         showError('No analysis results to display');
@@ -751,12 +754,12 @@ function displayResults(analysis) {
     }
 
     const confidenceColor = getConfidenceColor(analysis.confidenceScore);
-    
+
     // Format the starter template code with proper line breaks
     const formattedTemplate = analysis.starterTemplate
         ? analysis.starterTemplate.split('\n').map(line => line.trim()).join('\n')
         : '';
-    
+
     const resultsHTML = `
         <div class="results-container">
             <div class="recommendation-header">
@@ -796,7 +799,7 @@ function displayResults(analysis) {
             </div>
         </div>
     `;
-    
+
     showModal(resultsHTML);
 
     // Store the current analysis and description for download
@@ -950,85 +953,10 @@ function getConfidenceColor(score) {
     return '#ef4444'; // Error red
 }
 
-// Add this CSS to your style.css file
-const styleSheet = document.createElement('style');
-styleSheet.textContent = `
-.loading-spinner {
-    width: 40px;
-    height: 40px;
-    margin: 20px auto;
-    border: 4px solid var(--background-dark);
-    border-top: 4px solid var(--primary-color);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
-
-.error-container {
-    text-align: center;
-    padding: 2rem;
-}
-
-.error-container h3 {
-    color: var(--error-color);
-    margin-bottom: 1rem;
-}
-
-.error-container p {
-    margin-bottom: 2rem;
-    color: var(--text-secondary);
-}
-
-.error-container button {
-    margin: 0.5rem;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-`;
-document.head.appendChild(styleSheet);
-
-// Mobile Navigation
-if (hamburger && navLinks) {
-    hamburger.addEventListener('click', (e) => {
-        e.stopPropagation();
-        hamburger.classList.toggle('active');
-        navLinks.classList.toggle('active');
-        document.body.style.overflow = navLinks.classList.contains('active') ? 'hidden' : '';
-    });
-
-    // Close menu when clicking outside
-    document.addEventListener('click', (e) => {
-        if (!hamburger.contains(e.target) && !navLinks.contains(e.target) && navLinks.classList.contains('active')) {
-            hamburger.classList.remove('active');
-            navLinks.classList.remove('active');
-            document.body.style.overflow = '';
-        }
-    });
-
-    // Close menu when clicking a link
-    navLinks.querySelectorAll('a').forEach(link => {
-        link.addEventListener('click', () => {
-            hamburger.classList.remove('active');
-            navLinks.classList.remove('active');
-            document.body.style.overflow = '';
-        });
-    });
-}
-
-// Initialize
-document.addEventListener('DOMContentLoaded', () => {
-    checkAuthStatus();
-    projectDescription.addEventListener('input', updateWordCount);
-    analyzeBtn.addEventListener('click', handleAnalyze);
-});
-
-// Refund Functions
 async function requestRefund(paymentId, reason) {
     try {
         debugLog('Requesting refund for payment:', paymentId);
-        
+
         const response = await fetch('/api/payment/refund', {
             method: 'POST',
             headers: {
@@ -1042,7 +970,7 @@ async function requestRefund(paymentId, reason) {
         });
 
         const result = await response.json();
-        
+
         if (!response.ok) {
             throw new Error(result.error || 'Failed to process refund');
         }
@@ -1059,7 +987,7 @@ async function requestRefund(paymentId, reason) {
 async function checkRefundStatus(paymentId) {
     try {
         debugLog('Checking refund status for payment:', paymentId);
-        
+
         const response = await fetch(`/api/payment/refund/${paymentId}`, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
@@ -1067,7 +995,7 @@ async function checkRefundStatus(paymentId) {
         });
 
         const result = await response.json();
-        
+
         if (!response.ok) {
             throw new Error(result.error || 'Failed to check refund status');
         }
@@ -1099,7 +1027,7 @@ function showRefundModal(paymentId) {
 async function submitRefund(paymentId) {
     const reasonElement = document.getElementById('refundReason');
     const reason = reasonElement?.value?.trim();
-    
+
     if (!reason) {
         showError('Please provide a reason for the refund');
         return;
@@ -1114,12 +1042,12 @@ async function submitRefund(paymentId) {
         `;
 
         const result = await requestRefund(paymentId, reason);
-        
+
         modalContent.innerHTML = `
             <div class="success-container">
                 <h3>Refund Processed</h3>
                 <p>Your refund has been processed successfully.</p>
-                <p>Amount: ₹${result.refund.amount/100}</p>
+                <p>Amount: ₹${result.refund.amount / 100}</p>
                 <button onclick="closeModal()" class="primary-btn">Close</button>
             </div>
         `;
@@ -1134,7 +1062,6 @@ async function submitRefund(paymentId) {
     }
 }
 
-// Add refund button to payment history
 function updatePaymentHistory(payments) {
     const paymentList = document.getElementById('paymentHistory');
     if (!paymentList) return;
@@ -1142,22 +1069,29 @@ function updatePaymentHistory(payments) {
     paymentList.innerHTML = payments.map(payment => `
         <div class="payment-item">
             <div class="payment-info">
-                <span>Amount: ₹${payment.amount/100}</span>
+                <span>Amount: ₹${payment.amount / 100}</span>
                 <span>Date: ${new Date(payment.createdAt).toLocaleDateString()}</span>
                 <span>Status: ${payment.status}</span>
             </div>
-            ${payment.status === 'completed' && !payment.refundStatus ? 
-                `<button onclick="showRefundModal('${payment.razorpayPaymentId}')" class="secondary-btn">Request Refund</button>` 
-                : payment.refundStatus ? 
-                `<span class="refund-status">Refund ${payment.refundStatus}</span>` 
+            ${payment.status === 'completed' && !payment.refundStatus ?
+            `<button onclick="showRefundModal('${payment.razorpayPaymentId}')" class="secondary-btn">Request Refund</button>`
+            : payment.refundStatus ?
+                `<span class="refund-status">Refund ${payment.refundStatus}</span>`
                 : ''
-            }
+        }
         </div>
     `).join('');
 }
 
 // Make payment function globally available
 window.initializePayment = initiatePayment;
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    checkAuthStatus();
+    projectDescription.addEventListener('input', updateWordCount);
+    analyzeBtn.addEventListener('click', handleAnalyze);
+});
 
 // DEMO FEATURE LOGIC
 if (demoBtn) {
@@ -1174,7 +1108,7 @@ if (closeDemoModal) {
         demoModal.style.display = 'none';
     };
 }
-window.onclick = function(event) {
+window.onclick = function (event) {
     if (event.target === demoModal) {
         demoModal.style.display = 'none';
     }
@@ -1206,7 +1140,7 @@ if (generateDemoBtn) {
                 // Parse the result and use displayResults for consistent UI
                 let analysisObj = data.result;
                 if (typeof analysisObj === 'string') {
-                    try { analysisObj = JSON.parse(analysisObj); } catch (e) {}
+                    try { analysisObj = JSON.parse(analysisObj); } catch (e) { }
                 }
                 displayResults(analysisObj);
                 demoModal.style.display = 'none';
@@ -1220,4 +1154,4 @@ if (generateDemoBtn) {
             generateDemoBtn.disabled = false;
         }
     });
-} 
+}

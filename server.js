@@ -7,16 +7,15 @@ const fs = require('fs');
 const multer = require('multer');
 const timeout = require('connect-timeout');
 const crypto = require('crypto');
-const Razorpay = require('razorpay');
 const { PrismaClient } = require('@prisma/client');
 const userRoutes = require('./routes/user');
 const paymentRoutes = require('./routes/payment');
 const auth = require('./middleware/auth');
-const { 
-    refundLimiter, 
-    paymentVerifyLimiter, 
-    loginLimiter, 
-    apiLimiter 
+const {
+  refundLimiter,
+  paymentVerifyLimiter,
+  loginLimiter,
+  apiLimiter
 } = require('./middleware/rateLimit');
 const webhookRoutes = require('./routes/webhook');
 
@@ -26,79 +25,18 @@ const PORT = process.env.PORT || 3000;
 
 // Configure CORS with specific options
 app.use(cors({
-    origin: true,
-    credentials: true,
-    exposedHeaders: [
-        'x-rtb-fingerprint-id',
-        'x-razorpay-signature',
-        'x-razorpay-order-id',
-        'x-razorpay-payment-id'
-    ]
+  origin: true,
+  credentials: true,
+  exposedHeaders: [
+    'x-rtb-fingerprint-id',
+    'x-razorpay-signature',
+    'x-razorpay-order-id',
+    'x-razorpay-payment-id'
+  ]
 }));
 
 // Initialize Prisma
 const prisma = new PrismaClient();
-
-// Initialize Razorpay with better error handling
-let razorpay;
-try {
-    // Check if environment variables are loaded
-    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-        console.error('Razorpay environment variables are missing:');
-        console.error(`RAZORPAY_KEY_ID: ${process.env.RAZORPAY_KEY_ID ? 'Present' : 'Missing'}`);
-        console.error(`RAZORPAY_KEY_SECRET: ${process.env.RAZORPAY_KEY_SECRET ? 'Present' : 'Missing'}`);
-        
-        // In production, we'll throw an error
-        if (process.env.NODE_ENV === 'production') {
-            throw new Error('Razorpay credentials are not configured. Please check environment variables.');
-        }
-        
-        console.warn('Creating mock Razorpay instance for development');
-        // In development, we'll create a mock instance
-        razorpay = {
-            orders: {
-                create: () => Promise.resolve({ 
-                    id: 'test_order_' + Date.now(),
-                    amount: 19900,
-                    currency: 'INR',
-                    status: 'created'
-                })
-            },
-            payments: {
-                fetch: () => Promise.resolve({
-                    status: 'captured',
-                    order_id: 'test_order_' + Date.now(),
-                    amount: 19900
-                })
-            }
-        };
-    } else {
-        // Initialize real Razorpay instance
-        razorpay = new Razorpay({
-            key_id: process.env.RAZORPAY_KEY_ID,
-            key_secret: process.env.RAZORPAY_KEY_SECRET
-        });
-        console.log('Razorpay initialized with:', {
-            keyType: process.env.RAZORPAY_KEY_ID.startsWith('rzp_live') ? 'live' : 'test',
-            environment: process.env.NODE_ENV || 'development'
-        });
-    }
-} catch (error) {
-    console.error('Failed to initialize Razorpay:', error);
-    razorpay = null;
-}
-
-// Middleware to check Razorpay initialization
-const checkRazorpay = (req, res, next) => {
-    if (!razorpay) {
-        console.error('Razorpay not initialized');
-        return res.status(503).json({
-            error: 'Payment service unavailable',
-            details: 'Payment system is not properly configured. Please check server logs.'
-        });
-    }
-    next();
-};
 
 // In-memory session storage (replace with Redis/DB in production)
 const sessions = new Map();
@@ -168,7 +106,7 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     console.log('File filter - mimetype:', file.mimetype);
     console.log('File filter - original name:', file.originalname);
-    
+
     // Accept any text-based mimetype or files with .md extension
     if (
       file.mimetype.startsWith('text/') ||
@@ -311,11 +249,11 @@ app.post('/api/download-md', (req, res) => {
   try {
     const { projectDescription, analysis } = req.body;
     const markdownContent = generateMarkdown(projectDescription, analysis);
-    
+
     // Set headers for markdown download
     res.setHeader('Content-Type', 'text/markdown');
     res.setHeader('Content-Disposition', 'attachment; filename=project-analysis.md');
-    
+
     res.send(markdownContent);
   } catch (error) {
     console.error('Markdown generation error:', error);
@@ -346,143 +284,10 @@ app.use((err, req, res, next) => {
 
 // Payment routes are handled in routes/payment.js
 
-// Verify Razorpay payment
-app.post('/api/verify-payment', auth, checkRazorpay, async (req, res) => {
-    try {
-        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-
-        console.log('Payment verification request received:', {
-            orderId: razorpay_order_id,
-            paymentId: razorpay_payment_id,
-            userId: req.user.id
-        });
-
-        // Validate required fields
-        if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-            console.log('Missing required fields:', {
-                hasOrderId: !!razorpay_order_id,
-                hasPaymentId: !!razorpay_payment_id,
-                hasSignature: !!razorpay_signature
-            });
-            return res.status(400).json({
-                error: 'Missing required payment verification fields',
-                success: false
-            });
-        }
-
-        // First check if payment is already verified
-        const existingPayment = await prisma.payment.findFirst({
-            where: {
-                razorpayOrderId: razorpay_order_id,
-                status: 'completed'
-            }
-        });
-
-        if (existingPayment) {
-            console.log('Payment already verified:', existingPayment);
-            return res.json({
-                success: true,
-                message: 'Payment already verified',
-                paymentId: existingPayment.razorpayPaymentId,
-                uploadsRemaining: 1
-            });
-        }
-
-        // Verify payment with Razorpay
-        try {
-            console.log('Fetching payment details from Razorpay:', razorpay_payment_id);
-            const payment = await razorpay.payments.fetch(razorpay_payment_id);
-            
-            console.log('Razorpay payment details:', {
-                status: payment.status,
-                amount: payment.amount,
-                orderId: payment.order_id
-            });
-
-            if (payment.status !== 'captured') {
-                return res.status(400).json({
-                    error: 'Payment not captured',
-                    success: false,
-                    details: `Payment status: ${payment.status}`
-                });
-            }
-
-            // Verify signature
-            const body = razorpay_order_id + "|" + razorpay_payment_id;
-            const expectedSignature = crypto
-                .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-                .update(body.toString())
-                .digest("hex");
-
-            if (expectedSignature !== razorpay_signature) {
-                console.log('Signature verification failed:', {
-                    expected: expectedSignature,
-                    received: razorpay_signature
-                });
-                return res.status(400).json({
-                    error: 'Invalid payment signature',
-                    success: false
-                });
-            }
-
-            // Update payment record
-            const updatedPayment = await prisma.payment.updateMany({
-                where: {
-                    razorpayOrderId: razorpay_order_id,
-                    userId: req.user.id,
-                    status: 'pending'
-                },
-                data: {
-                    razorpayPaymentId: razorpay_payment_id,
-                    status: 'completed',
-                    verifiedAt: new Date()
-                }
-            });
-
-            if (updatedPayment.count === 0) {
-                console.log('No payment record updated:', {
-                    orderId: razorpay_order_id,
-                    userId: req.user.id
-                });
-                return res.status(400).json({
-                    error: 'Failed to update payment record',
-                    success: false
-                });
-            }
-
-            console.log('Payment verification successful:', {
-                paymentId: razorpay_payment_id,
-                userId: req.user.id
-            });
-
-            res.json({
-                success: true,
-                message: 'Payment verified successfully',
-                paymentId: razorpay_payment_id,
-                uploadsRemaining: 1
-            });
-        } catch (razorpayError) {
-            console.error('Razorpay API error:', razorpayError);
-            return res.status(400).json({
-                error: 'Failed to verify payment with Razorpay',
-                success: false,
-                details: razorpayError.message
-            });
-        }
-    } catch (error) {
-        console.error('Payment verification error:', error);
-        res.status(500).json({
-            error: 'Payment verification failed',
-            success: false,
-            details: error.message
-        });
-    }
-});
-
 // Upload and analyze markdown route
 app.post('/api/upload-md', (req, res) => {
   const paymentId = req.headers['x-payment-id'];
-  
+
   // Check if this is a paid analysis or re-upload
   if (!paymentId) {
     return res.status(400).json({
@@ -509,7 +314,7 @@ app.post('/api/upload-md', (req, res) => {
 
   console.log('Received upload request');
   console.log('Request headers:', req.headers);
-  
+
   upload.single('mdFile')(req, res, (err) => {
     if (err) {
       console.error('Multer upload error:', err);
@@ -631,11 +436,11 @@ async function processUploadedFile(req, res) {
           throw new Error('No JSON found in OpenAI response');
         }
         analysis = JSON.parse(jsonMatch[0]);
-        
+
         // Validate required fields
         const requiredFields = ['recommendation', 'confidenceScore', 'reasoning', 'costEstimate', 'timeEstimate', 'starterTemplate'];
         const missingFields = requiredFields.filter(field => !analysis[field]);
-        
+
         if (missingFields.length > 0) {
           throw new Error(`Invalid response format. Missing fields: ${missingFields.join(', ')}`);
         }
@@ -644,10 +449,10 @@ async function processUploadedFile(req, res) {
         if (!['AI Agent', 'Simple Script'].includes(analysis.recommendation)) {
           throw new Error('Invalid recommendation value');
         }
-        
-        if (typeof analysis.confidenceScore !== 'number' || 
-            analysis.confidenceScore < 1 || 
-            analysis.confidenceScore > 100) {
+
+        if (typeof analysis.confidenceScore !== 'number' ||
+          analysis.confidenceScore < 1 ||
+          analysis.confidenceScore > 100) {
           throw new Error('Invalid confidence score');
         }
 
@@ -734,7 +539,7 @@ app.get('*', (req, res) => {
 const findAvailablePort = (startPort) => {
   return new Promise((resolve, reject) => {
     const server = require('net').createServer();
-    
+
     server.once('error', err => {
       if (err.code === 'EADDRINUSE') {
         resolve(findAvailablePort(startPort + 1));
@@ -777,4 +582,4 @@ process.on('SIGTERM', () => {
 });
 
 // Start the server
-startServer(); 
+startServer();
