@@ -414,6 +414,17 @@ async function handleAnalyze() {
     }
 
     try {
+        // Show loading state
+        modalContent.innerHTML = `
+            <div class="loading-container">
+                <h3>Analyzing Your Project...</h3>
+                <p>Our AI is evaluating whether you need an AI agent or a simple script.</p>
+                <p>This may take 15-30 seconds...</p>
+                <div class="loading-spinner"></div>
+            </div>
+        `;
+        modal.style.display = 'block';
+
         const response = await fetch('/api/analyze', {
             method: 'POST',
             headers: {
@@ -421,20 +432,30 @@ async function handleAnalyze() {
                 'Authorization': `Bearer ${authToken}`
             },
             body: JSON.stringify({
-                projectDescription: projectDescription.value
+                description: projectDescription.value
             })
         });
 
-        if (response.ok) {
-            const result = await response.json();
-            analysesRemaining--;
-            displayResults(result);
-            updateAnalysisCount();
-        } else {
-            throw new Error('Analysis failed');
+        const result = await response.json();
+        debugLog('Analysis response:', result);
+
+        if (!response.ok) {
+            throw new Error(result.error || result.details || 'Analysis failed');
         }
+
+        // Handle both formats: direct object or nested result string
+        let analysis = result;
+        if (typeof result.result === 'string') {
+            analysis = JSON.parse(result.result);
+        }
+
+        analysesRemaining--;
+        displayResults(analysis);
+        updateAnalysisCount();
     } catch (error) {
-        showError('Failed to analyze project. Please try again.');
+        debugLog('Analysis error:', error);
+        modal.style.display = 'none';
+        showError(`Analysis failed: ${error.message}. Please try again.`);
     }
 }
 
@@ -742,9 +763,21 @@ function showError(message) {
 }
 
 function showSuccess(message) {
-    // Implement showSuccess similar to showError but green
     debugLog('Showing success:', message);
-    alert(message); // Placeholder
+    const successDiv = document.getElementById('error-message');
+    if (successDiv) {
+        successDiv.textContent = message;
+        successDiv.style.display = 'block';
+        successDiv.style.background = '#065f46';
+        successDiv.style.borderColor = '#22c55e';
+        setTimeout(() => {
+            successDiv.style.display = 'none';
+            successDiv.style.background = '';
+            successDiv.style.borderColor = '';
+        }, 5000);
+    } else {
+        alert(message);
+    }
 }
 
 function displayResults(analysis) {
@@ -1137,10 +1170,12 @@ if (generateDemoBtn) {
             });
             if (response.ok) {
                 const data = await response.json();
-                // Parse the result and use displayResults for consistent UI
-                let analysisObj = data.result;
-                if (typeof analysisObj === 'string') {
-                    try { analysisObj = JSON.parse(analysisObj); } catch (e) { }
+                // Handle both formats: direct object or nested result string
+                let analysisObj = data;
+                if (typeof data.result === 'string') {
+                    try { analysisObj = JSON.parse(data.result); } catch (e) { }
+                } else if (data.result && typeof data.result === 'object') {
+                    analysisObj = data.result;
                 }
                 displayResults(analysisObj);
                 demoModal.style.display = 'none';

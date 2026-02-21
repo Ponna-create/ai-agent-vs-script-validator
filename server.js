@@ -486,38 +486,110 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'healthy' });
 });
 
-// Analysis route
-app.post('/api/analyze', async (req, res, next) => {
+// Shared function to run OpenAI analysis
+async function runOpenAIAnalysis(description) {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OpenAI API key not configured');
+  }
+
+  const OpenAI = require('openai');
+  const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+    timeout: 30000,
+    maxRetries: 3
+  });
+
+  const prompt = `Analyze this project description and determine if it needs an AI agent or a simple script. Project description: ${description}
+
+    Consider:
+    1. Complexity of decision-making required
+    2. Need for natural language processing
+    3. Adaptability requirements
+    4. Data processing needs
+
+    Return a JSON object with EXACTLY these fields:
+    {
+      "recommendation": "AI Agent" or "Simple Script",
+      "confidenceScore": number between 1-100,
+      "reasoning": "detailed explanation string",
+      "costEstimate": "estimated cost range string",
+      "timeEstimate": "estimated time string",
+      "starterTemplate": "code template string"
+    }`;
+
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.7,
+    max_tokens: 2000
+  });
+
+  const responseContent = completion.choices[0].message.content;
+  const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error('No JSON found in OpenAI response');
+  }
+
+  const analysis = JSON.parse(jsonMatch[0]);
+
+  // Validate required fields
+  const requiredFields = ['recommendation', 'confidenceScore', 'reasoning', 'costEstimate', 'timeEstimate', 'starterTemplate'];
+  const missingFields = requiredFields.filter(field => !analysis[field]);
+  if (missingFields.length > 0) {
+    throw new Error(`Invalid response format. Missing fields: ${missingFields.join(', ')}`);
+  }
+
+  return analysis;
+}
+
+// Analysis route - handles both demo and paid analysis
+app.post('/api/analyze', async (req, res) => {
   try {
-    // If demo flag is set, allow unauthenticated, unpaid analysis (one-off, not stored)
+    const description = req.body.description || req.body.projectDescription;
+
+    // Demo mode: free, unauthenticated, one-off analysis
     if (req.body.demo) {
-      if (!req.body.description || req.body.description.trim().split(/\s+/).length < 450) {
+      if (!description || description.trim().split(/\s+/).length < 450) {
         return res.status(400).json({ error: 'Please provide at least 450 words for the demo.' });
       }
-      const OpenAI = require('openai');
-      const openai = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-        timeout: 30000,
-        maxRetries: 3
-      });
-      const prompt = `Analyze this project description and determine if it needs an AI agent or a simple script. Project description: ${req.body.description}
-      \nConsider:\n1. Complexity of decision-making required\n2. Need for natural language processing\n3. Adaptability requirements\n4. Data processing needs\n\nReturn a JSON with:\n- recommendation: "AI Agent" or "Simple Script"\n- confidenceScore: number between 1-100\n- reasoning: detailed explanation\n- costEstimate: estimated cost range\n- timeEstimate: estimated time to implement\n- starterTemplate: basic code template`;
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4",
-        messages: [{ role: "user", content: prompt }],
-      });
-      const responseContent = completion.choices[0].message.content;
-      const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('No JSON found in OpenAI response');
-      }
-      const analysis = JSON.parse(jsonMatch[0]);
-      return res.json({ result: JSON.stringify(analysis, null, 2) });
+      const analysis = await runOpenAIAnalysis(description);
+      return res.json(analysis);
     }
-    // ... existing code for paid/regular analysis ...
-    next();
+
+    // Paid mode: requires auth token
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    // Verify JWT
+    const jwt = require('jsonwebtoken');
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (jwtError) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    // Find user
+    const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    // Validate description
+    if (!description || description.trim().split(/\s+/).length < 450) {
+      return res.status(400).json({ error: 'Please provide at least 450 words for analysis.' });
+    }
+
+    // Run the analysis
+    console.log(`Running paid analysis for user ${user.id}...`);
+    const analysis = await runOpenAIAnalysis(description);
+    console.log('Analysis completed successfully');
+
+    return res.json(analysis);
   } catch (error) {
-    console.error('Demo/Analysis error:', error);
+    console.error('Analysis error:', error);
     res.status(500).json({ error: 'Failed to analyze project', details: error.message });
   }
 });
