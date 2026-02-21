@@ -34,18 +34,22 @@ model Analysis {
 }
 
 model Payment {
-  id              String     @id @default(cuid())
-  userId          String
-  user            User       @relation(fields: [userId], references: [id])
-  razorpayOrderId String?    @unique
-  razorpayPaymentId String?  @unique
-  amount          Int
-  status          String     // pending, completed, failed, refunded
-  createdAt       DateTime   @default(now())
-  analyses        Analysis[]
-  uploadsRemaining Int       @default(1)
-  refundStatus    String?    // requested, processed, rejected
-  refundReason    String?    @db.Text
-  refundedAt      DateTime?
-  refundAmount    Int?
+  id                String     @id @default(cuid())
+  userId            String
+  user              User       @relation(fields: [userId], references: [id])
+  razorpayOrderId   String?    @unique
+  razorpayPaymentId String?    @unique
+  razorpaySignature String?
+  amount            Int
+  currency          String     @default("INR")
+  status            String     // pending, created, completed, failed, refunded
+  createdAt         DateTime   @default(now())
+  verifiedAt        DateTime?
+  analyses          Analysis[]
+  uploadsRemaining  Int        @default(1)
+  refundStatus      String?    // requested, processed, failed, rejected
+  refundReason      String?    @db.Text
+  refundedAt        DateTime?
+  refundAmount      Int?
+  refundId          String?
 } 
