@@ -40,7 +40,10 @@ router.post('/create-payment', auth, async (req, res) => {
             }
         });
 
-        res.json(order);
+        res.json({
+            ...order,
+            key: process.env.RAZORPAY_KEY_ID
+        });
     } catch (error) {
         console.error('Error creating payment order:', error);
         res.status(500).json({ error: 'Failed to create payment order' });
