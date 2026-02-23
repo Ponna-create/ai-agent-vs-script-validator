@@ -7,7 +7,7 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "build": "prisma generate",
-    "vercel-build": "prisma generate && prisma db push",
+    "vercel-build": "prisma generate && prisma db push --accept-data-loss",
     "postinstall": "prisma generate"
   },
   "keywords": ["ai", "spec", "generator", "claude-code", "lovable", "bolt", "cursor"],
