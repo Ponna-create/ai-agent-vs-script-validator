@@ -3,655 +3,84 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
-const fs = require('fs');
-const multer = require('multer');
 const timeout = require('connect-timeout');
-const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
+
 const userRoutes = require('./routes/user');
 const paymentRoutes = require('./routes/payment');
-const auth = require('./middleware/auth');
-const {
-  refundLimiter,
-  paymentVerifyLimiter,
-  loginLimiter,
-  apiLimiter
-} = require('./middleware/rateLimit');
-const webhookRoutes = require('./routes/webhook');
+const specRoutes = require('./routes/spec');
+const { apiLimiter, loginLimiter } = require('./middleware/rateLimit');
 
-// Initialize Express app with improved error handling for Vercel deployment
 const app = express();
-const PORT = process.env.PORT || 3000;
+const prisma = new PrismaClient();
 
-// Configure CORS with specific options
+// CORS
 app.use(cors({
   origin: true,
   credentials: true,
-  exposedHeaders: [
-    'x-rtb-fingerprint-id',
-    'x-razorpay-signature',
-    'x-razorpay-order-id',
-    'x-razorpay-payment-id'
-  ]
+  exposedHeaders: ['x-razorpay-signature', 'x-razorpay-order-id', 'x-razorpay-payment-id']
 }));
 
-// Initialize Prisma
-const prisma = new PrismaClient();
-
-// In-memory session storage (replace with Redis/DB in production)
-const sessions = new Map();
-
-// Session management functions
-function createSession(paymentId) {
-  sessions.set(paymentId, {
-    uploadsRemaining: 1, // Allow 1 re-upload
-    created: Date.now(),
-    lastUpload: Date.now()
-  });
-  return paymentId;
-}
-
-function getSession(paymentId) {
-  return sessions.get(paymentId);
-}
-
-function updateSession(paymentId) {
-  const session = sessions.get(paymentId);
-  if (session) {
-    session.uploadsRemaining--;
-    session.lastUpload = Date.now();
-    sessions.set(paymentId, session);
-  }
-}
-
-// Clean up expired sessions (24 hours)
-setInterval(() => {
-  const now = Date.now();
-  for (const [paymentId, session] of sessions.entries()) {
-    if (now - session.created > 24 * 60 * 60 * 1000) {
-      sessions.delete(paymentId);
-    }
-  }
-}, 60 * 60 * 1000); // Check every hour
-
-// Configure multer for .md file uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadDir = path.join(__dirname, 'uploads');
-    console.log('Upload directory:', uploadDir);
-    try {
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
-        console.log('Created upload directory');
-      }
-      cb(null, uploadDir);
-    } catch (error) {
-      console.error('Failed to create upload directory:', error);
-      cb(error);
-    }
-  },
-  filename: function (req, file, cb) {
-    console.log('Incoming file:', file);
-    const filename = 'analysis-' + Date.now() + '.md';
-    console.log('Generated filename:', filename);
-    cb(null, filename);
-  }
-});
-
-const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
-  },
-  fileFilter: (req, file, cb) => {
-    console.log('File filter - mimetype:', file.mimetype);
-    console.log('File filter - original name:', file.originalname);
-
-    // Accept any text-based mimetype or files with .md extension
-    if (
-      file.mimetype.startsWith('text/') ||
-      file.originalname.toLowerCase().endsWith('.md') ||
-      file.originalname.toLowerCase().endsWith('.markdown')
-    ) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only text files with .md or .markdown extensions are allowed'));
-    }
-  }
-});
-
-// Configure Helmet with custom CSP
+// Security
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: [
-        "'self'",
-        "'unsafe-inline'",
-        "https://checkout.razorpay.com",
-        "https://*.razorpay.com"
-      ],
-      styleSrc: [
-        "'self'",
-        "'unsafe-inline'",
-        "https://fonts.googleapis.com",
-        "https://*.razorpay.com"
-      ],
-      imgSrc: [
-        "'self'",
-        "data:",
-        "https:",
-        "https://*.razorpay.com"
-      ],
-      connectSrc: [
-        "'self'",
-        "https://api.razorpay.com",
-        "https://checkout.razorpay.com",
-        "https://*.razorpay.com"
-      ],
-      fontSrc: [
-        "'self'",
-        "https://fonts.gstatic.com",
-        "https://fonts.googleapis.com",
-        "data:"
-      ],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com", "https://*.razorpay.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://*.razorpay.com"],
+      imgSrc: ["'self'", "data:", "https:", "https://*.razorpay.com"],
+      connectSrc: ["'self'", "https://api.razorpay.com", "https://checkout.razorpay.com", "https://*.razorpay.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+      frameSrc: ["'self'", "https://api.razorpay.com", "https://checkout.razorpay.com", "https://*.razorpay.com"],
       objectSrc: ["'none'"],
-      mediaSrc: ["'self'"],
-      frameSrc: [
-        "'self'",
-        "https://api.razorpay.com",
-        "https://checkout.razorpay.com",
-        "https://*.razorpay.com"
-      ],
       frameAncestors: ["'self'"],
       formAction: ["'self'"],
-      baseUri: ["'self'"],
-      manifestSrc: ["'self'"],
-      workerSrc: ["'self'", "blob:"],
-      childSrc: ["'self'", "blob:"],
-      upgradeInsecureRequests: []
+      baseUri: ["'self'"]
     }
   },
   crossOriginEmbedderPolicy: false,
-  crossOriginResourcePolicy: { policy: "cross-origin" },
-  crossOriginOpenerPolicy: { policy: "same-origin" }
+  crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-app.use(express.json());
+// Body parsing
+app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Add timeout middleware
-app.use(timeout('30s'));
+// Timeout
+app.use(timeout('120s'));
 app.use((req, res, next) => {
   if (!req.timedout) next();
 });
 
-// Mount user routes
-app.use('/api/user', userRoutes);
-app.use('/api/payment', paymentRoutes);
-
-// Mount webhook routes (no authentication required)
-app.use('/webhook', webhookRoutes);
-
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Generate markdown content
-function generateMarkdown(projectDescription, analysis) {
-  return `# Project Analysis Report
-
-## Project Description
-${projectDescription}
-
-## Analysis Results
-
-### Recommendation: ${analysis.recommendation}
-**Confidence Score:** ${analysis.confidenceScore}%
-
-### Reasoning
-${analysis.reasoning}
-
-### Cost Estimate
-${analysis.costEstimate}
-
-### Time Estimate
-${analysis.timeEstimate}
-
-### Starter Template
-\`\`\`
-${analysis.starterTemplate}
-\`\`\`
-
----
-*Generated by AI Agent vs Script Validator*
-*Edit this file to add more details and re-upload for refined analysis*
-
-## How to Improve Your Analysis
-
-1. Add more specific details about:
-   - Technical requirements
-   - Scale and complexity
-   - Integration needs
-   - Performance requirements
-   - Budget constraints
-
-2. Clarify:
-   - User interaction patterns
-   - Data processing needs
-   - Security requirements
-   - Maintenance expectations
-
-3. Upload the edited file for a more accurate analysis
-`;
-}
-
-// Download markdown route
-app.post('/api/download-md', (req, res) => {
-  try {
-    const { projectDescription, analysis } = req.body;
-    const markdownContent = generateMarkdown(projectDescription, analysis);
-
-    // Set headers for markdown download
-    res.setHeader('Content-Type', 'text/markdown');
-    res.setHeader('Content-Disposition', 'attachment; filename=project-analysis.md');
-
-    res.send(markdownContent);
-  } catch (error) {
-    console.error('Markdown generation error:', error);
-    res.status(500).json({ error: 'Failed to generate markdown file' });
-  }
-});
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('Global error handler:', err);
-  if (err instanceof multer.MulterError) {
-    return res.status(400).json({
-      error: 'File upload error',
-      details: err.message
-    });
-  }
-  if (err.name === 'SyntaxError') {
-    return res.status(400).json({
-      error: 'Invalid request format',
-      details: err.message
-    });
-  }
-  res.status(500).json({
-    error: 'Internal server error',
-    details: err.message
-  });
-});
-
-// Payment routes are handled in routes/payment.js
-
-// Upload and analyze markdown route
-app.post('/api/upload-md', (req, res) => {
-  const paymentId = req.headers['x-payment-id'];
-
-  // Check if this is a paid analysis or re-upload
-  if (!paymentId) {
-    return res.status(400).json({
-      error: 'Payment ID required',
-      details: 'Please complete payment to analyze your project'
-    });
-  }
-
-  // Verify session and upload limits
-  const session = getSession(paymentId);
-  if (!session) {
-    return res.status(403).json({
-      error: 'Invalid or expired session',
-      details: 'Please make a new payment to continue analyzing'
-    });
-  }
-
-  if (session.uploadsRemaining <= 0) {
-    return res.status(403).json({
-      error: 'Upload limit reached',
-      details: 'You have used all your re-upload attempts. Please make a new payment to continue analyzing.'
-    });
-  }
-
-  console.log('Received upload request');
-  console.log('Request headers:', req.headers);
-
-  upload.single('mdFile')(req, res, (err) => {
-    if (err) {
-      console.error('Multer upload error:', err);
-      return res.status(400).json({
-        error: 'File upload failed',
-        details: err.message
-      });
-    }
-
-    if (!req.file) {
-      console.error('No file in request');
-      return res.status(400).json({
-        error: 'No file uploaded',
-        details: 'Please select a markdown file'
-      });
-    }
-
-    // Update session upload count
-    updateSession(paymentId);
-    const uploadsRemaining = session.uploadsRemaining - 1;
-
-    processUploadedFile(req, res).then(analysis => {
-      res.json({
-        ...analysis,
-        uploadsRemaining,
-        sessionValid: true
-      });
-    }).catch((error) => {
-      console.error('Process file error:', error);
-      res.status(500).json({
-        error: 'Failed to process file',
-        details: error.message
-      });
-    });
-  });
-});
-
-// Separate function to process the uploaded file
-async function processUploadedFile(req, res) {
-  try {
-    // Read the uploaded file
-    let fileContent;
-    try {
-      fileContent = await fs.promises.readFile(req.file.path, 'utf8');
-      console.log('File read successfully, size:', fileContent.length);
-    } catch (readError) {
-      throw new Error(`Failed to read file: ${readError.message}`);
-    }
-
-    // Extract project description
-    const descriptionMatch = fileContent.match(/## Project Description\n([\s\S]*?)(?=\n##|$)/);
-    if (!descriptionMatch || !descriptionMatch[1].trim()) {
-      throw new Error('Invalid markdown format: Project description section not found. Please ensure your file has a "## Project Description" section.');
-    }
-
-    const projectDescription = descriptionMatch[1].trim();
-    if (projectDescription.length < 50) {
-      throw new Error('Project description is too short. Please provide more details (minimum 50 characters).');
-    }
-
-    console.log('Project description extracted, length:', projectDescription.length);
-
-    // Clean up the uploaded file
-    try {
-      await fs.promises.unlink(req.file.path);
-      console.log('Temporary file deleted:', req.file.path);
-    } catch (deleteError) {
-      console.warn('Failed to delete temporary file:', deleteError);
-      // Continue processing even if cleanup fails
-    }
-
-    // Validate OpenAI configuration
-    if (!process.env.OPENAI_API_KEY) {
-      throw new Error('OpenAI API key not configured');
-    }
-
-    // Initialize OpenAI
-    const OpenAI = require('openai');
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-      timeout: 30000, // 30 second timeout
-      maxRetries: 3
-    });
-
-    // Prepare and send OpenAI request
-    const prompt = `Analyze this project description and determine if it needs an AI agent or a simple script. Project description: ${projectDescription}
-    
-    Consider:
-    1. Complexity of decision-making required
-    2. Need for natural language processing
-    3. Adaptability requirements
-    4. Data processing needs
-    
-    Return a JSON object with EXACTLY these fields:
-    {
-      "recommendation": "AI Agent" or "Simple Script",
-      "confidenceScore": number between 1-100,
-      "reasoning": "detailed explanation string",
-      "costEstimate": "estimated cost range string",
-      "timeEstimate": "estimated time string",
-      "starterTemplate": "code template string"
-    }`;
-
-    console.log('Sending request to OpenAI...');
-    try {
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.7,
-        max_tokens: 2000
-      });
-
-      // Parse and validate OpenAI response
-      let analysis;
-      try {
-        const responseContent = completion.choices[0].message.content;
-        const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-          throw new Error('No JSON found in OpenAI response');
-        }
-        analysis = JSON.parse(jsonMatch[0]);
-
-        // Validate required fields
-        const requiredFields = ['recommendation', 'confidenceScore', 'reasoning', 'costEstimate', 'timeEstimate', 'starterTemplate'];
-        const missingFields = requiredFields.filter(field => !analysis[field]);
-
-        if (missingFields.length > 0) {
-          throw new Error(`Invalid response format. Missing fields: ${missingFields.join(', ')}`);
-        }
-
-        // Validate field types and values
-        if (!['AI Agent', 'Simple Script'].includes(analysis.recommendation)) {
-          throw new Error('Invalid recommendation value');
-        }
-
-        if (typeof analysis.confidenceScore !== 'number' ||
-          analysis.confidenceScore < 1 ||
-          analysis.confidenceScore > 100) {
-          throw new Error('Invalid confidence score');
-        }
-
-        console.log('Analysis completed successfully');
-      } catch (parseError) {
-        console.error('OpenAI response parsing error:', parseError);
-        throw new Error(`Failed to parse OpenAI response: ${parseError.message}`);
-      }
-    } catch (openaiError) {
-      console.error('OpenAI API error:', openaiError);
-      if (openaiError.code === 'ECONNABORTED') {
-        throw new Error('OpenAI API request timed out');
-      } else if (openaiError.response?.status === 429) {
-        throw new Error('OpenAI API rate limit exceeded');
-      } else if (openaiError.response?.status === 401) {
-        throw new Error('Invalid OpenAI API key');
-      } else {
-        throw new Error(`OpenAI API error: ${openaiError.message}`);
-      }
-    }
-
-    return analysis;
-  } catch (error) {
-    console.error('File processing error:', error);
-    throw new Error(`Failed to process file: ${error.message}`);
-  }
-}
-
 // Routes
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'healthy' });
-});
+app.use('/api/user', loginLimiter, userRoutes);
+app.use('/api/payment', paymentRoutes);
+app.use('/api/spec', specRoutes);
 
-// Shared function to run OpenAI analysis
-async function runOpenAIAnalysis(description) {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error('OpenAI API key not configured');
-  }
-
-  const OpenAI = require('openai');
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    timeout: 30000,
-    maxRetries: 3
-  });
-
-  const prompt = `Analyze this project description and determine if it needs an AI agent or a simple script. Project description: ${description}
-
-    Consider:
-    1. Complexity of decision-making required
-    2. Need for natural language processing
-    3. Adaptability requirements
-    4. Data processing needs
-
-    Return a JSON object with EXACTLY these fields:
-    {
-      "recommendation": "AI Agent" or "Simple Script",
-      "confidenceScore": number between 1-100,
-      "reasoning": "detailed explanation string",
-      "costEstimate": "estimated cost range string",
-      "timeEstimate": "estimated time string",
-      "starterTemplate": "code template string"
-    }`;
-
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4",
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.7,
-    max_tokens: 2000
-  });
-
-  const responseContent = completion.choices[0].message.content;
-  const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error('No JSON found in OpenAI response');
-  }
-
-  const analysis = JSON.parse(jsonMatch[0]);
-
-  // Validate required fields
-  const requiredFields = ['recommendation', 'confidenceScore', 'reasoning', 'costEstimate', 'timeEstimate', 'starterTemplate'];
-  const missingFields = requiredFields.filter(field => !analysis[field]);
-  if (missingFields.length > 0) {
-    throw new Error(`Invalid response format. Missing fields: ${missingFields.join(', ')}`);
-  }
-
-  return analysis;
-}
-
-// Analysis route - handles both demo and paid analysis
-app.post('/api/analyze', async (req, res) => {
-  try {
-    const description = req.body.description || req.body.projectDescription;
-
-    // Demo mode: free, unauthenticated, one-off analysis
-    if (req.body.demo) {
-      if (!description || description.trim().split(/\s+/).length < 450) {
-        return res.status(400).json({ error: 'Please provide at least 450 words for the demo.' });
-      }
-      const analysis = await runOpenAIAnalysis(description);
-      return res.json(analysis);
-    }
-
-    // Paid mode: requires auth token
-    const token = req.header('Authorization')?.replace('Bearer ', '');
-    if (!token) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    // Verify JWT
-    const jwt = require('jsonwebtoken');
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (jwtError) {
-      return res.status(401).json({ error: 'Invalid or expired token' });
-    }
-
-    // Find user
-    const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
-    if (!user) {
-      return res.status(401).json({ error: 'User not found' });
-    }
-
-    // Validate description
-    if (!description || description.trim().split(/\s+/).length < 450) {
-      return res.status(400).json({ error: 'Please provide at least 450 words for analysis.' });
-    }
-
-    // Run the analysis
-    console.log(`Running paid analysis for user ${user.id}...`);
-    const analysis = await runOpenAIAnalysis(description);
-    console.log('Analysis completed successfully');
-
-    return res.json(analysis);
-  } catch (error) {
-    console.error('Analysis error:', error);
-    res.status(500).json({ error: 'Failed to analyze project', details: error.message });
-  }
-});
-
-// Apply rate limiters to specific endpoints
-app.use('/api/payment/refund', refundLimiter);
-app.use('/api/verify-payment', paymentVerifyLimiter);
-app.use('/api/user/login', loginLimiter);
-
-// Apply general API rate limit to all other routes
+// Rate limit on general API
 app.use('/api', apiLimiter);
 
-// Handle all other routes by serving index.html
+// Static files
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'healthy', version: '2.0.0' });
+});
+
+// SPA fallback
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Server startup with error handling
-const findAvailablePort = (startPort) => {
-  return new Promise((resolve, reject) => {
-    const server = require('net').createServer();
-
-    server.once('error', err => {
-      if (err.code === 'EADDRINUSE') {
-        resolve(findAvailablePort(startPort + 1));
-      } else {
-        reject(err);
-      }
-    });
-
-    server.once('listening', () => {
-      server.close();
-      resolve(startPort);
-    });
-
-    server.listen(startPort);
-  });
-};
-
-const startServer = async () => {
-  try {
-    const port = await findAvailablePort(3000);
-    app.listen(port, () => {
-      console.log(`\n🚀 Server running at http://localhost:${port}`);
-      console.log('Press Ctrl+C to stop the server\n');
-    });
-  } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
-  }
-};
-
-// Handle process termination
-process.on('SIGINT', () => {
-  console.log('\n👋 Shutting down server gracefully...');
-  process.exit(0);
+// Error handler
+app.use((err, req, res, next) => {
+  console.error('Global error:', err);
+  res.status(500).json({ error: 'Internal server error', details: err.message });
 });
 
-process.on('SIGTERM', () => {
-  console.log('\n👋 Shutting down server gracefully...');
-  process.exit(0);
+// Start server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running at http://localhost:${PORT}`);
 });
-
-// Start the server
-startServer();

@@ -1,274 +1,393 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://*.razorpay.com">
-    <title>AI Agent vs Script Validator</title>
-    <link rel="icon" type="image/x-icon" href="/images/favicon.ico">
-    <link rel="stylesheet" href="css/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- Razorpay SDK -->
-    <script src="https://checkout.razorpay.com/v1/checkout.js" 
-            crossorigin="anonymous"
-            defer></script>
-            
-    <!-- Main JavaScript -->
-    <script src="/js/main.js" defer></script>
-    
-    <style>
-        /* Payment Status Styles */
-        #payment-status {
-            margin: 10px 0;
-            padding: 10px;
-            border-radius: 4px;
-            text-align: center;
-            font-weight: bold;
-        }
-        
-        #error-message {
-            display: none;
-            background-color: #fee2e2;
-            color: #dc2626;
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 4px;
-            text-align: center;
-        }
-        
-        .payment-container {
-            max-width: 600px;
-            margin: 40px auto;
-            padding: 20px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        
-        .payment-button {
-            background-color: #3b82f6;
-            color: white;
-            padding: 12px 24px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 500;
-            transition: background-color 0.2s;
-        }
-        
-        .payment-button:hover {
-            background-color: #2563eb;
-        }
-        
-        .payment-button:disabled {
-            background-color: #9ca3af;
-            cursor: not-allowed;
-        }
-        
-        /* Your existing styles will be preserved here */
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Spec Generator - Turn Your App Idea Into a Production-Ready Spec</title>
+  <meta name="description" content="Stop wasting tokens. Generate production-ready .md spec files for Claude Code, Lovable, Bolt, and Cursor. Build working apps on the first try.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-    <header>
-        <nav aria-label="Main navigation">
-            <div class="logo">
-                <h1>AI Agent vs Script Validator</h1>
-            </div>
-            <div class="nav-links" role="navigation">
-                <a href="#features" aria-label="Features section">Features</a>
-                <a href="#testimonials" aria-label="Testimonials section">Testimonials</a>
-                <a href="#faq" aria-label="FAQ section">FAQ</a>
-                <a href="/refund-policy.html" aria-label="Refund policy">Refund Policy</a>
-            </div>
-            <div class="auth-section" role="region" aria-label="Authentication">
-                <!-- Authentication UI will be dynamically inserted here -->
-            </div>
-            <button class="hamburger" aria-label="Toggle menu" aria-expanded="false">
-                <span></span>
-                <span></span>
-                <span></span>
-            </button>
-        </nav>
-    </header>
 
-    <main>
-        <section class="hero-section" aria-label="Introduction">
-            <h1>AI Agent or Simple Script?</h1>
-            <p>Make the right technical decision for your project with our AI-powered analyzer</p>
-            <div class="cta-buttons">
-                <button class="primary-btn">Start Analysis</button>
-                <button class="secondary-btn">Learn More</button>
-                <button class="demo-btn" id="demoBtn">Demo</button>
-            </div>
-        </section>
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="/" class="logo">
+        <span class="logo-icon">&#9889;</span> AI Spec Generator
+      </a>
+      <div class="nav-links">
+        <a href="#how-it-works">How It Works</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#faq">FAQ</a>
+      </div>
+      <div class="auth-section" id="authSection">
+        <button onclick="showLoginModal()" class="btn btn-ghost">Login</button>
+        <button onclick="showRegisterModal()" class="btn btn-primary btn-sm">Sign Up Free</button>
+      </div>
+      <button class="hamburger" id="hamburger">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
 
-        <section id="features" class="features-section" aria-label="Features">
-            <h2>Key Features</h2>
-            <div class="features-grid" role="list">
-                <div class="feature-card" role="listitem">
-                    <h3>Confidence Score</h3>
-                    <p>Get a clear confidence score from 1-100 for the recommendation</p>
-                </div>
-                <div class="feature-card" role="listitem">
-                    <h3>Cost Estimation</h3>
-                    <p>Detailed cost breakdown for both approaches</p>
-                </div>
-                <div class="feature-card" role="listitem">
-                    <h3>Code Templates</h3>
-                    <p>Get starter code templates for the recommended approach</p>
-                </div>
-                <div class="feature-card" role="listitem">
-                    <h3>OpenAI Best Practices</h3>
-                    <p>Built following OpenAI's agent-building guidelines for security and reliability</p>
-                </div>
-            </div>
-        </section>
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badge">Works with Claude Code, Lovable, Bolt, Cursor & more</div>
+      <h1>Your App Idea to<br><span class="gradient-text">Production-Ready Spec</span><br>in 60 Seconds</h1>
+      <p class="hero-sub">Stop burning tokens with vague prompts. Generate a detailed .md specification file that makes AI coding tools build your app right the first time.</p>
+      <div class="hero-cta">
+        <a href="#generator" class="btn btn-primary btn-lg">Generate Your Spec - Free</a>
+        <a href="#how-it-works" class="btn btn-ghost btn-lg">See How It Works</a>
+      </div>
+      <div class="hero-stats">
+        <div class="stat"><strong>10+ hrs</strong><span>saved per project</span></div>
+        <div class="stat"><strong>$50+</strong><span>in tokens saved</span></div>
+        <div class="stat"><strong>6 files</strong><span>in Pro spec pack</span></div>
+      </div>
+    </div>
+  </section>
 
-        <section id="analyzer" class="analyzer-section" aria-label="Project analyzer">
-            <h2>Project Analyzer</h2>
-            <div class="analyzer-form" role="form" aria-label="Analysis form">
-                <textarea 
-                    id="projectDescription" 
-                    placeholder="Describe your project in detail (minimum 450 words). Include technical requirements, scale, complexity, integration needs, and any specific challenges."
-                    rows="10"
-                    aria-label="Project description"
-                ></textarea>
-                <div class="word-count" aria-live="polite">Words: <span id="wordCount">0</span>/450</div>
-                <button id="analyzeBtn" class="primary-btn" disabled aria-label="Analyze project">Analyze Project (₹199)</button>
-            </div>
-        </section>
+  <!-- Tool Logos -->
+  <section class="tools-bar">
+    <div class="container">
+      <p>Optimized for the tools you already use</p>
+      <div class="tool-logos">
+        <span class="tool-badge">Claude Code</span>
+        <span class="tool-badge">Lovable</span>
+        <span class="tool-badge">Bolt.new</span>
+        <span class="tool-badge">Cursor</span>
+        <span class="tool-badge">Replit Agent</span>
+      </div>
+    </div>
+  </section>
 
-        <section id="testimonials" class="testimonials-section" aria-label="Testimonials">
-            <h2>What Developers Say</h2>
-            <div class="testimonials-grid" role="list">
-                <div class="testimonial-card" role="listitem">
-                    <p>"The analyzer helped me make the right choice between building an AI chatbot vs a rule-based system. Saved weeks of potential rework!"</p>
-                    <div class="author">- Sarah K., Senior Developer</div>
-                </div>
-                <div class="testimonial-card" role="listitem">
-                    <p>"Accurate cost estimates and starter templates made it easy to pitch the right approach to stakeholders."</p>
-                    <div class="author">- Mike R., Tech Lead</div>
-                </div>
-            </div>
-        </section>
-
-        <section id="faq" class="faq-section" aria-label="Frequently asked questions">
-            <h2>Frequently Asked Questions</h2>
-            <div class="faq-grid" role="list">
-                <div class="faq-item" role="listitem">
-                    <h3>How accurate is the analysis?</h3>
-                    <p>Our AI analyzer uses GPT-4 to provide recommendations with detailed confidence scores and reasoning.</p>
-                </div>
-                <div class="faq-item" role="listitem">
-                    <h3>Can I refine my analysis?</h3>
-                    <p>Yes! You get 2 re-uploads with each analysis to refine your project description and get better recommendations.</p>
-                </div>
-            </div>
-        </section>
-    </main>
-
-    <div id="results-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-        <div id="results-content" class="modal-content">
-            <span class="close" aria-label="Close modal">&times;</span>
+  <!-- How It Works -->
+  <section id="how-it-works" class="section">
+    <div class="container">
+      <h2 class="section-title">How It Works</h2>
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-number">1</div>
+          <h3>Describe Your App</h3>
+          <p>Tell us your app idea in plain English. Our guided form asks the right questions — no technical jargon needed.</p>
         </div>
-    </div>
-
-    <div id="demo-modal" class="modal" style="display:none;">
-        <div class="modal-content">
-            <span class="close" id="closeDemoModal">&times;</span>
-            <h2>Try the Demo (Free)</h2>
-            <textarea 
-                id="demoProjectDescription" 
-                placeholder="Paste your project idea here (minimum 450 words)."
-                rows="10"
-            ></textarea>
-            <div class="word-count">Words: <span id="demoWordCount">0</span>/450</div>
-            <button id="generateDemoBtn" class="primary-btn" disabled>Generate Report (Free Demo)</button>
-            <div id="demoResult" style="margin-top:20px;"></div>
+        <div class="step-card">
+          <div class="step-number">2</div>
+          <h3>We Generate Your Spec</h3>
+          <p>AI creates a production-ready .md specification with features, database schema, API routes, and UI structure.</p>
         </div>
-    </div>
-
-    <footer role="contentinfo">
-        <p>&copy; 2025 AI Agent vs Script Validator. All rights reserved.</p>
-        <div class="footer-links" role="navigation" aria-label="Footer navigation">
-            <a href="/refund-policy.html" aria-label="Refund policy">Refund Policy</a>
-            <a href="/terms.html" aria-label="Terms of service">Terms of Service</a>
-            <a href="/privacy.html" aria-label="Privacy policy">Privacy Policy</a>
+        <div class="step-card">
+          <div class="step-number">3</div>
+          <h3>Paste & Build</h3>
+          <p>Drop your spec into Claude Code, Lovable, or Bolt. Watch it build a working app on the first try.</p>
         </div>
-    </footer>
-
-    <div class="payment-container" role="region" aria-label="Payment section">
-        <h1>Premium Access</h1>
-        <p>Get access to advanced brain training features and personalized analytics.</p>
-        
-        <div id="payment-status" role="status" aria-live="polite"></div>
-        <div id="error-message" role="alert"></div>
-        
-        <button id="payment-button" 
-            class="payment-button" 
-            data-amount="19900"
-            data-currency="INR"
-            aria-label="Pay ₹199.00">
-        Pay ₹199.00
-    </button>
+      </div>
     </div>
+  </section>
 
-    <!-- Debug Panel -->
-    <div id="debug-panel" style="position: fixed; top: 10px; right: 10px; background: #f0f0f0; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 12px; z-index: 9999; display: none;">
-        <h4>Debug Info</h4>
-        <p>Token: <span id="debug-token">NONE</span></p>
-        <p>User: <span id="debug-user">NONE</span></p>
-        <p>Button: <span id="debug-button">NOT FOUND</span></p>
-        <p>Razorpay: <span id="debug-razorpay">NOT LOADED</span></p>
-        <p>Payment Function: <span id="debug-payment-fn">NOT FOUND</span></p>
-        <button onclick="forceLogout()">Force Logout</button>
-        <button onclick="testPayment()">Test Payment</button>
-        <button onclick="toggleDebug()">Hide</button>
+  <!-- Generator Form -->
+  <section id="generator" class="section section-dark">
+    <div class="container">
+      <h2 class="section-title">Generate Your Spec</h2>
+      <p class="section-sub">Answer a few questions and get your production-ready specification file</p>
+
+      <div class="generator-wrapper">
+        <!-- Progress Bar -->
+        <div class="progress-bar">
+          <div class="progress-steps">
+            <div class="progress-step active" data-step="1"><span>1</span> Your Idea</div>
+            <div class="progress-step" data-step="2"><span>2</span> Platform</div>
+            <div class="progress-step" data-step="3"><span>3</span> Features</div>
+            <div class="progress-step" data-step="4"><span>4</span> Tech</div>
+            <div class="progress-step" data-step="5"><span>5</span> Design</div>
+          </div>
+          <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+        </div>
+
+        <!-- Step 1: Your Idea -->
+        <div class="form-step active" id="step1">
+          <h3>Tell us about your app idea</h3>
+          <div class="form-group">
+            <label>App Name <span class="optional">(optional)</span></label>
+            <input type="text" id="appName" placeholder="e.g. FreelanceHub, TaskFlow, ShopEasy" class="input">
+          </div>
+          <div class="form-group">
+            <label>Describe your app in plain English <span class="required">*</span></label>
+            <textarea id="appDescription" rows="5" placeholder="I want to build a marketplace where freelance designers can showcase their portfolios and clients can hire them directly. Users should be able to browse designers by category, view their work, send project requests, and pay through the platform..." class="input"></textarea>
+            <div class="char-count"><span id="descCount">0</span> characters (minimum 20)</div>
+          </div>
+          <div class="form-group">
+            <label>What problem does it solve? <span class="optional">(optional but helps a lot)</span></label>
+            <textarea id="problemSolved" rows="3" placeholder="Small businesses struggle to find reliable freelance designers. Existing platforms charge high fees and have slow hiring processes..." class="input"></textarea>
+          </div>
+          <div class="form-nav">
+            <div></div>
+            <button onclick="nextStep()" class="btn btn-primary">Next: Platform &rarr;</button>
+          </div>
+        </div>
+
+        <!-- Step 2: Platform & Target -->
+        <div class="form-step" id="step2">
+          <h3>Who's it for & where will it run?</h3>
+          <div class="form-group">
+            <label>Who will use this app?</label>
+            <textarea id="targetUsers" rows="2" placeholder="Small business owners who need quick design work, freelance designers looking for clients..." class="input"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Platform</label>
+            <div class="option-grid">
+              <label class="option-card selected"><input type="radio" name="platform" value="web" checked><span>&#127760; Web App</span></label>
+              <label class="option-card"><input type="radio" name="platform" value="mobile"><span>&#128241; Mobile App</span></label>
+              <label class="option-card"><input type="radio" name="platform" value="desktop"><span>&#128187; Desktop App</span></label>
+              <label class="option-card"><input type="radio" name="platform" value="extension"><span>&#128268; Chrome Extension</span></label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Which AI tool will you use to build it?</label>
+            <div class="option-grid">
+              <label class="option-card selected"><input type="radio" name="aiTool" value="claude-code" checked><span>Claude Code</span></label>
+              <label class="option-card"><input type="radio" name="aiTool" value="lovable"><span>Lovable</span></label>
+              <label class="option-card"><input type="radio" name="aiTool" value="bolt"><span>Bolt.new</span></label>
+              <label class="option-card"><input type="radio" name="aiTool" value="cursor"><span>Cursor</span></label>
+              <label class="option-card"><input type="radio" name="aiTool" value="replit"><span>Replit Agent</span></label>
+              <label class="option-card"><input type="radio" name="aiTool" value="other"><span>Other</span></label>
+            </div>
+          </div>
+          <div class="form-nav">
+            <button onclick="prevStep()" class="btn btn-ghost">&larr; Back</button>
+            <button onclick="nextStep()" class="btn btn-primary">Next: Features &rarr;</button>
+          </div>
+        </div>
+
+        <!-- Step 3: Features -->
+        <div class="form-step" id="step3">
+          <h3>What should the app do?</h3>
+          <div class="form-group">
+            <label>Core Features <span class="required">*</span></label>
+            <div id="featuresList" class="features-list">
+              <div class="feature-item">
+                <input type="text" placeholder="e.g. User registration and login" class="input feature-input">
+                <button onclick="removeFeature(this)" class="btn-icon">&times;</button>
+              </div>
+            </div>
+            <button onclick="addFeature()" class="btn btn-ghost btn-sm">+ Add Feature</button>
+          </div>
+          <div class="form-group">
+            <label>User Roles</label>
+            <div class="checkbox-grid">
+              <label class="checkbox-card"><input type="checkbox" name="userRoles" value="user" checked> Regular User</label>
+              <label class="checkbox-card"><input type="checkbox" name="userRoles" value="admin" checked> Admin</label>
+              <label class="checkbox-card"><input type="checkbox" name="userRoles" value="guest"> Guest (no login)</label>
+              <label class="checkbox-card"><input type="checkbox" name="userRoles" value="moderator"> Moderator</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Authentication Type</label>
+            <select id="authType" class="input">
+              <option value="email-password">Email & Password</option>
+              <option value="google-oauth">Google OAuth</option>
+              <option value="magic-link">Magic Link (passwordless)</option>
+              <option value="both">Email + Google OAuth</option>
+              <option value="none">No authentication needed</option>
+            </select>
+          </div>
+          <div class="form-nav">
+            <button onclick="prevStep()" class="btn btn-ghost">&larr; Back</button>
+            <button onclick="nextStep()" class="btn btn-primary">Next: Tech &rarr;</button>
+          </div>
+        </div>
+
+        <!-- Step 4: Tech Preferences -->
+        <div class="form-step" id="step4">
+          <h3>Technical preferences <span class="optional">(optional)</span></h3>
+          <p class="step-hint">Not sure? Leave on "Let AI decide" — we'll pick the best stack for your app.</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Tech Stack</label>
+              <select id="techStack" class="input">
+                <option value="auto">Let AI decide (Recommended)</option>
+                <option value="nextjs-tailwind">Next.js + Tailwind CSS</option>
+                <option value="react-node">React + Node.js + Express</option>
+                <option value="vue-node">Vue.js + Node.js</option>
+                <option value="python-fastapi">Python + FastAPI</option>
+                <option value="svelte">SvelteKit</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Database</label>
+              <select id="database" class="input">
+                <option value="auto">Let AI decide (Recommended)</option>
+                <option value="postgresql">PostgreSQL</option>
+                <option value="supabase">Supabase</option>
+                <option value="mongodb">MongoDB</option>
+                <option value="firebase">Firebase</option>
+                <option value="sqlite">SQLite</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Extra capabilities</label>
+            <div class="checkbox-grid">
+              <label class="checkbox-card"><input type="checkbox" id="needsPayments"> &#128179; Payment Processing</label>
+              <label class="checkbox-card"><input type="checkbox" id="needsUploads"> &#128206; File Uploads</label>
+              <label class="checkbox-card"><input type="checkbox" id="needsRealtime"> &#9889; Real-time (chat, live updates)</label>
+              <label class="checkbox-card"><input type="checkbox" id="darkMode"> &#127769; Dark Mode</label>
+            </div>
+          </div>
+          <div class="form-nav">
+            <button onclick="prevStep()" class="btn btn-ghost">&larr; Back</button>
+            <button onclick="nextStep()" class="btn btn-primary">Next: Design &rarr;</button>
+          </div>
+        </div>
+
+        <!-- Step 5: Design -->
+        <div class="form-step" id="step5">
+          <h3>Design preferences</h3>
+          <div class="form-group">
+            <label>Design Style</label>
+            <div class="option-grid">
+              <label class="option-card selected"><input type="radio" name="designStyle" value="minimal" checked><span>&#9898; Minimal & Clean</span></label>
+              <label class="option-card"><input type="radio" name="designStyle" value="bold"><span>&#128293; Bold & Modern</span></label>
+              <label class="option-card"><input type="radio" name="designStyle" value="corporate"><span>&#128188; Corporate</span></label>
+              <label class="option-card"><input type="radio" name="designStyle" value="playful"><span>&#127912; Playful & Colorful</span></label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Primary Color <span class="optional">(optional)</span></label>
+            <div class="color-row">
+              <input type="color" id="colorScheme" value="#2563eb" class="color-picker">
+              <span id="colorHex">#2563eb</span>
+              <button onclick="document.getElementById('colorScheme').value='#2563eb';document.getElementById('colorHex').textContent='#2563eb'" class="btn btn-ghost btn-sm">Reset</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Reference website <span class="optional">(optional — "I want it to look like...")</span></label>
+            <input type="url" id="referenceUrl" placeholder="https://example.com" class="input">
+          </div>
+          <div class="form-nav">
+            <button onclick="prevStep()" class="btn btn-ghost">&larr; Back</button>
+            <button onclick="generateSpec('free')" class="btn btn-primary btn-lg" id="generateFreeBtn">&#9889; Generate Free Spec</button>
+            <button onclick="generateSpec('pro')" class="btn btn-accent btn-lg" id="generateProBtn">&#11088; Generate Pro Pack (&#8377;299)</button>
+          </div>
+        </div>
+      </div>
     </div>
+  </section>
 
-    <script>
-        // Check if payment function exists
-        window.addEventListener('load', function() {
-            const paymentBtn = document.getElementById('payment-button');
-            if (paymentBtn) {
-                if (typeof window.initializePayment !== 'function') {
-                    paymentBtn.disabled = true;
-                    const paymentStatus = document.getElementById('payment-status');
-                    if (paymentStatus) {
-                        paymentStatus.textContent = 'Payment system is loading...';
-                    }
-                }
-            }
-            
-            // Update debug panel
-            updateDebugPanel();
-        });
-        
-        // Debug functions
-        function toggleDebug() {
-            const debugPanel = document.getElementById('debug-panel');
-            if (debugPanel) {
-                debugPanel.style.display = debugPanel.style.display === 'none' ? 'block' : 'none';
-            }
-        }
-        
-        function testPayment() {
-            console.log('Testing payment initialization...');
-            if (typeof window.initializePayment === 'function') {
-                console.log('Payment function is available');
-            } else {
-                console.error('Payment function not available');
-            }
-        }
-        
-        // Show debug panel on Ctrl+Shift+D
-        document.addEventListener('keydown', function(e) {
-            if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-                toggleDebug();
-            }
-        });
-    </script>
+  <!-- Pricing -->
+  <section id="pricing" class="section">
+    <div class="container">
+      <h2 class="section-title">Simple Pricing</h2>
+      <p class="section-sub">Start free. Upgrade when you need the full spec pack.</p>
+      <div class="pricing-grid">
+        <div class="pricing-card">
+          <div class="pricing-header">
+            <h3>Free</h3>
+            <div class="price">&#8377;0</div>
+          </div>
+          <ul class="pricing-features">
+            <li>&#10003; Single .md spec file</li>
+            <li>&#10003; Core features & pages</li>
+            <li>&#10003; Basic data model</li>
+            <li>&#10003; User flow</li>
+            <li>&#10003; File structure</li>
+            <li class="disabled">&#10007; Database schema details</li>
+            <li class="disabled">&#10007; API route definitions</li>
+            <li class="disabled">&#10007; UI component spec</li>
+            <li class="disabled">&#10007; Deployment guide</li>
+            <li class="disabled">&#10007; Tool-specific optimization</li>
+          </ul>
+          <a href="#generator" class="btn btn-ghost btn-block">Generate Free Spec</a>
+        </div>
+        <div class="pricing-card featured">
+          <div class="pricing-badge">Best Value</div>
+          <div class="pricing-header">
+            <h3>Pro</h3>
+            <div class="price">&#8377;299 <span class="price-note">per spec pack</span></div>
+          </div>
+          <ul class="pricing-features">
+            <li>&#10003; Everything in Free</li>
+            <li><strong>&#10003; 6-file spec pack (.zip)</strong></li>
+            <li>&#10003; PRD.md - Product Requirements</li>
+            <li>&#10003; TECHNICAL.md - Architecture</li>
+            <li>&#10003; DATABASE.md - Full Schema</li>
+            <li>&#10003; API.md - All Endpoints</li>
+            <li>&#10003; UI.md - Component Spec</li>
+            <li>&#10003; SETUP.md - Deployment Guide</li>
+            <li>&#10003; Tool-specific optimization</li>
+            <li>&#10003; 3x regenerations</li>
+          </ul>
+          <a href="#generator" class="btn btn-primary btn-block">Get Pro Spec Pack</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section id="faq" class="section section-dark">
+    <div class="container">
+      <h2 class="section-title">Frequently Asked Questions</h2>
+      <div class="faq-list">
+        <div class="faq-item">
+          <button class="faq-question" onclick="toggleFaq(this)">What is a .md spec file?</button>
+          <div class="faq-answer"><p>A markdown (.md) file is a structured text document that AI coding tools like Claude Code, Lovable, and Bolt can read and follow. Think of it as a detailed blueprint for your app — it tells the AI exactly what to build, including features, database structure, API routes, and UI layout.</p></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" onclick="toggleFaq(this)">Which AI tools does this work with?</button>
+          <div class="faq-answer"><p>Our specs are optimized for Claude Code, Lovable (GPT Engineer), Bolt.new, Cursor, and Replit Agent. The Pro pack lets you choose your specific tool, and we format the spec to match how that tool works best.</p></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" onclick="toggleFaq(this)">Do I need technical knowledge?</button>
+          <div class="faq-answer"><p>No! Our guided form asks simple questions in plain English. You describe what you want your app to do, and we handle all the technical details — database design, API structure, component hierarchy, and more.</p></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" onclick="toggleFaq(this)">What's in the Pro spec pack?</button>
+          <div class="faq-answer"><p>The Pro pack includes 6 detailed files: PRD.md (product requirements), TECHNICAL.md (architecture & tech stack), DATABASE.md (complete schema with relationships), API.md (all endpoints with examples), UI.md (component spec & design system), and SETUP.md (deployment guide). Together, they give AI coding tools everything they need to build a complete, working application.</p></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" onclick="toggleFaq(this)">How does this save me money?</button>
+          <div class="faq-answer"><p>Without a good spec, AI tools generate vague or broken code. You end up going back and forth 10+ times, burning tokens and hours. A clear spec means the AI builds the right thing on the first try — saving you $50+ in wasted tokens and 10+ hours of frustration.</p></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" onclick="toggleFaq(this)">Can I edit the spec after generating?</button>
+          <div class="faq-answer"><p>Absolutely! The .md files are plain text — open them in any text editor, VS Code, or even Notion. Edit anything you want before pasting into your AI coding tool. Pro users also get 3 regenerations if they want to tweak inputs and get a fresh spec.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-brand">
+          <span class="logo-icon">&#9889;</span> AI Spec Generator
+          <p>Turn app ideas into production-ready specs.</p>
+        </div>
+        <div class="footer-links">
+          <a href="/privacy.html">Privacy Policy</a>
+          <a href="/terms.html">Terms of Service</a>
+          <a href="/refund-policy.html">Refund Policy</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2025 ppokasoft. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Modal -->
+  <div class="modal" id="modal">
+    <div class="modal-content" id="modalContent"></div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script src="/js/main.js"></script>
 </body>
-</html> 
+</html>

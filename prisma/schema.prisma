@@ -1,55 +1,81 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url = env("POSTGRES_URL")
+  provider  = "postgresql"
+  url       = env("POSTGRES_URL")
   directUrl = env("POSTGRES_URL_NON_POOLING")
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
+  id        String    @id @default(cuid())
+  email     String    @unique
   password  String
   name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  analyses  Analysis[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  specs     Spec[]
   payments  Payment[]
 }
 
-model Analysis {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  description String   @db.Text
-  result      Json
-  createdAt   DateTime @default(now())
-  paymentId   String
-  payment     Payment  @relation(fields: [paymentId], references: [id])
+model Spec {
+  id             String   @id @default(cuid())
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id])
+
+  // Input data
+  appName        String?
+  appDescription String   @db.Text
+  problemSolved  String?  @db.Text
+  targetUsers    String?  @db.Text
+  platform       String   @default("web")
+  aiTool         String   @default("claude-code")
+  features       Json
+  userRoles      Json?
+  authType       String?
+  techStack      String?
+  database       String?
+  designStyle    String?
+  colorScheme    String?
+  referenceUrl   String?
+  needsPayments  Boolean  @default(false)
+  needsUploads   Boolean  @default(false)
+  needsRealtime  Boolean  @default(false)
+  darkMode       Boolean  @default(false)
+
+  // Output
+  basicSpec      String?  @db.Text
+  fullSpecPack   Json?
+
+  // Metadata
+  specType       String   @default("free")
+  generationsUsed Int     @default(0)
+  maxGenerations  Int     @default(1)
+  status         String   @default("draft")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  paymentId      String?
+  payment        Payment? @relation(fields: [paymentId], references: [id])
 }
 
 model Payment {
-  id                String     @id @default(cuid())
+  id                String    @id @default(cuid())
   userId            String
-  user              User       @relation(fields: [userId], references: [id])
-  razorpayOrderId   String?    @unique
-  razorpayPaymentId String?    @unique
+  user              User      @relation(fields: [userId], references: [id])
+  razorpayOrderId   String?   @unique
+  razorpayPaymentId String?   @unique
   razorpaySignature String?
   amount            Int
-  currency          String     @default("INR")
-  status            String     // pending, created, completed, failed, refunded
-  createdAt         DateTime   @default(now())
+  currency          String    @default("INR")
+  status            String
+  createdAt         DateTime  @default(now())
   verifiedAt        DateTime?
-  analyses          Analysis[]
-  uploadsRemaining  Int        @default(1)
-  refundStatus      String?    // requested, processed, failed, rejected
-  refundReason      String?    @db.Text
+  specs             Spec[]
+  refundStatus      String?
+  refundReason      String?   @db.Text
   refundedAt        DateTime?
   refundAmount      Int?
   refundId          String?
-} 
+}
