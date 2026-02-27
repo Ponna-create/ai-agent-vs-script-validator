@@ -326,12 +326,67 @@ function copySpec() {
   });
 }
 
-function downloadSingleSpec(specId) {
-  window.open(`/api/spec/${specId}/download`, '_blank');
+async function downloadSingleSpec(specId) {
+  try {
+    const headers = {};
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(`/api/spec/${specId}/download`, { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Download failed');
+    }
+
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+    const filename = filenameMatch ? filenameMatch[1] : 'spec.md';
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Downloaded!', 'success');
+  } catch (err) {
+    console.error('Download error:', err);
+    showToast(err.message || 'Download failed', 'error');
+  }
 }
 
-function downloadSpecPack(specId) {
-  window.open(`/api/spec/${specId}/download-pack`, '_blank');
+async function downloadSpecPack(specId) {
+  try {
+    showToast('Preparing zip download...', 'success');
+    const headers = {};
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(`/api/spec/${specId}/download-pack`, { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Download failed');
+    }
+
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+    const filename = filenameMatch ? filenameMatch[1] : 'spec-pack.zip';
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Pro pack downloaded!', 'success');
+  } catch (err) {
+    console.error('Pack download error:', err);
+    showToast(err.message || 'Download failed', 'error');
+  }
 }
 
 function downloadSpecDirect() {
