@@ -675,7 +675,10 @@ function updateAuthUI() {
   if (authToken) {
     fetchProfile();
     section.innerHTML = `
-      <span style="color:var(--text-dim);font-size:0.85rem" id="userGreeting">Account</span>
+      <div class="user-info" id="userInfo">
+        <span id="userGreeting">Account</span>
+        <span id="proBadgeSlot"></span>
+      </div>
       <button onclick="showMySpecs()" class="btn btn-ghost btn-sm">My Specs</button>
       <button onclick="logout()" class="btn btn-ghost btn-sm">Logout</button>
     `;
@@ -698,6 +701,15 @@ async function fetchProfile() {
       const greeting = document.getElementById('userGreeting');
       if (greeting) {
         greeting.textContent = currentUser.name || currentUser.email.split('@')[0];
+      }
+      // Show Pro badge if user has pro specs
+      const badgeSlot = document.getElementById('proBadgeSlot');
+      if (badgeSlot && currentUser.isPro) {
+        let badgeHtml = '<span class="pro-badge">&#9733; PRO</span>';
+        if (currentUser.regenRemaining > 0) {
+          badgeHtml += `<span class="regen-count">${currentUser.regenRemaining} regen left</span>`;
+        }
+        badgeSlot.innerHTML = badgeHtml;
       }
     } else if (res.status === 401) {
       // Token expired

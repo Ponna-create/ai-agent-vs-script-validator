@@ -97,6 +97,49 @@ img { max-width: 100%; }
 .tool-badge {
   padding: 8px 16px; border-radius: 20px; background: var(--bg-card);
   border: 1px solid var(--border); font-size: 0.85rem; color: var(--text-dim);
+  transition: all 0.3s ease; cursor: default; font-weight: 500;
+}
+.tool-badge:hover { transform: translateY(-2px); }
+
+/* Brand colors — Claude Code (Anthropic warm tan) */
+.badge-claude { border-color: rgba(217, 119, 6, 0.4); color: #d97706; }
+.badge-claude:hover { background: rgba(217, 119, 6, 0.12); border-color: #d97706; box-shadow: 0 4px 15px rgba(217, 119, 6, 0.2); }
+
+/* Lovable (pink) */
+.badge-lovable { border-color: rgba(236, 72, 153, 0.4); color: #ec4899; }
+.badge-lovable:hover { background: rgba(236, 72, 153, 0.12); border-color: #ec4899; box-shadow: 0 4px 15px rgba(236, 72, 153, 0.2); }
+
+/* Bolt.new (yellow/lime) */
+.badge-bolt { border-color: rgba(234, 179, 8, 0.4); color: #eab308; }
+.badge-bolt:hover { background: rgba(234, 179, 8, 0.12); border-color: #eab308; box-shadow: 0 4px 15px rgba(234, 179, 8, 0.2); }
+
+/* Cursor (blue) */
+.badge-cursor { border-color: rgba(59, 130, 246, 0.4); color: #3b82f6; }
+.badge-cursor:hover { background: rgba(59, 130, 246, 0.12); border-color: #3b82f6; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2); }
+
+/* Replit (orange) */
+.badge-replit { border-color: rgba(242, 101, 34, 0.4); color: #f26522; }
+.badge-replit:hover { background: rgba(242, 101, 34, 0.12); border-color: #f26522; box-shadow: 0 4px 15px rgba(242, 101, 34, 0.2); }
+
+/* Tool option cards in form — brand accents on selection */
+.tool-opt-claude:has(input:checked) { border-color: #d97706; background: rgba(217, 119, 6, 0.1); }
+.tool-opt-lovable:has(input:checked) { border-color: #ec4899; background: rgba(236, 72, 153, 0.1); }
+.tool-opt-bolt:has(input:checked) { border-color: #eab308; background: rgba(234, 179, 8, 0.1); }
+.tool-opt-cursor:has(input:checked) { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
+.tool-opt-replit:has(input:checked) { border-color: #f26522; background: rgba(242, 101, 34, 0.1); }
+
+/* Pro badge in nav */
+.pro-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #000; padding: 2px 10px; border-radius: 12px;
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.5px;
+}
+.regen-count {
+  font-size: 0.75rem; color: var(--text-dim); margin-left: 4px;
+}
+.user-info {
+  display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--text-dim);
 }
 
 /* === STEPS === */

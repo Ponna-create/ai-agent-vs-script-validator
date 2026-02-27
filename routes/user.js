@@ -75,11 +75,19 @@ router.get('/profile', auth, async (req, res) => {
       }
     });
 
+    // Compute Pro status from specs
+    const proSpecs = (user.specs || []).filter(s => s.specType === 'pro' && s.status === 'completed');
+    const isPro = proSpecs.length > 0;
+    const totalRegenLeft = proSpecs.reduce((sum, s) => sum + Math.max(0, s.maxGenerations - s.generationsUsed), 0);
+
     res.json({
       user: {
         id: user.id,
         email: user.email,
         name: user.name,
+        isPro,
+        proSpecCount: proSpecs.length,
+        regenRemaining: totalRegenLeft,
         specs: user.specs,
         payments: user.payments
       }
